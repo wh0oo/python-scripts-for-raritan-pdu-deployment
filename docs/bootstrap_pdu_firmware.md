@@ -127,10 +127,10 @@ notepad .\pdus.txt
 ```
 
 ```text
-# Cabinet BJ16-BJ25 PDUs
-10.42.98.10
-10.42.98.11
-10.42.98.12
+# Example group of PDUs
+10.10.5.10
+10.10.5.11
+10.10.5.12
 ```
 
 Blank lines are ignored. Lines starting with `#` are ignored. Duplicate IPs are skipped automatically.
@@ -158,7 +158,7 @@ python .\bootstrap_pdu_firmware.py --ips .\pdus.txt --check -v
 ```
 ```text
 2026-07-04 10:12:04 INFO Processing 1 PDU(s) [CHECK, concurrency=1, verify_cert=False]...
-2026-07-04 10:12:05 INFO 10.42.98.137: OK - firmware=4.3.0.5-51180
+2026-07-04 10:12:05 INFO 10.10.5.137: OK - firmware=4.3.0.5-51180
 2026-07-04 10:12:05 INFO Done. OK=1 Failed=0
 ```
 
@@ -168,7 +168,7 @@ python .\bootstrap_pdu_firmware.py --ips .\pdus.txt --update --image .\pdu-firmw
 ```
 ```text
 2026-07-04 10:20:11 INFO Processing 1 PDU(s) [UPDATE DRY RUN, concurrency=1, verify_cert=False]...
-2026-07-04 10:20:12 INFO 10.42.98.137: OK - would_update; current=4.3.0.5-51180; image=.\pdu-firmware.bin
+2026-07-04 10:20:12 INFO 10.10.5.137: OK - would_update; current=4.3.0.5-51180; image=.\pdu-firmware.bin
 2026-07-04 10:20:12 INFO Done. OK=1 Failed=0
 ```
 The line to look for: `<IP>: OK - would_update`.
@@ -179,12 +179,12 @@ python .\bootstrap_pdu_firmware.py --ips .\pdus.txt --update --image .\pdu-firmw
 ```
 ```text
 2026-07-04 10:30:02 INFO Processing 1 PDU(s) [UPDATE LIVE, concurrency=1, verify_cert=False]...
-2026-07-04 10:30:03 INFO 10.42.98.137: current firmware=4.3.0.5-51180; uploading image=.\pdu-firmware.bin
-2026-07-04 10:30:07 INFO 10.42.98.137: uploaded image info - version=4.3.13; valid=True; compatible=True; ...
-2026-07-04 10:30:07 INFO 10.42.98.137: starting firmware update from 4.3.0.5-51180 to 4.3.13
-2026-07-04 10:30:17 INFO 10.42.98.137: update status - state=UPDATE
-2026-07-04 10:34:52 INFO 10.42.98.137: update status - state=SUCCESS
-2026-07-04 10:35:10 INFO 10.42.98.137: OK - changed; old=4.3.0.5-51180; image_version=4.3.13; new=4.3.13
+2026-07-04 10:30:03 INFO 10.10.5.137: current firmware=4.3.0.5-51180; uploading image=.\pdu-firmware.bin
+2026-07-04 10:30:07 INFO 10.10.5.137: uploaded image info - version=4.3.13; valid=True; compatible=True; ...
+2026-07-04 10:30:07 INFO 10.10.5.137: starting firmware update from 4.3.0.5-51180 to 4.3.13
+2026-07-04 10:30:17 INFO 10.10.5.137: update status - state=UPDATE
+2026-07-04 10:34:52 INFO 10.10.5.137: update status - state=SUCCESS
+2026-07-04 10:35:10 INFO 10.10.5.137: OK - changed; old=4.3.0.5-51180; image_version=4.3.13; new=4.3.13
 2026-07-04 10:35:10 INFO Done. OK=1 Failed=0
 ```
 The line to look for: `<IP>: OK - changed`.

@@ -103,13 +103,13 @@ notepad .\pdus.txt
 ```
 
 ```text
-# Cabinet BJ16-BJ25 left-side PDUs
-10.42.98.10
-10.42.98.11
-10.42.98.12
+# Example group of PDUs
+10.10.5.10
+10.10.5.11
+10.10.5.12
 
 # Spare PDU
-10.42.98.13
+10.10.5.13
 ```
 
 Blank lines are ignored. Lines starting with `#` are ignored. Duplicate IPs are skipped automatically.
@@ -152,7 +152,7 @@ The script prompts only for the old/default password in dry-run mode — no new 
 Good output, one PDU:
 ```text
 2026-07-03 21:56:58 INFO Processing 1 PDU(s) [DRY RUN, concurrency=1, verify_cert=False]...
-2026-07-03 21:56:58 INFO 10.42.98.137: OK - would_change
+2026-07-03 21:56:58 INFO 10.10.5.137: OK - would_change
 2026-07-03 21:56:58 INFO Done. OK=1 Failed=0
 ```
 
@@ -167,7 +167,7 @@ You'll be prompted for the current password, then the new password (twice).
 Good output, one PDU:
 ```text
 2026-07-03 22:05:12 INFO Processing 1 PDU(s) [LIVE, concurrency=1, verify_cert=False]...
-2026-07-03 22:05:14 INFO 10.42.98.137: OK - changed
+2026-07-03 22:05:14 INFO 10.10.5.137: OK - changed
 2026-07-03 22:05:14 INFO Done. OK=1 Failed=0
 ```
 
