@@ -2,12 +2,6 @@
 
 Python command-line scripts for bulk-managing **Raritan PX3 / PX2 rack PDUs** over their **JSON-RPC API** (`raritan.rpc` / `python3-raritan`). Point a script at a text file of PDU IP addresses and it logs into every device in the list to bootstrap default admin passwords or roll out a firmware image, sequentially or in parallel, with dry-run support and clear per-device pass/fail reporting.
 
-If you're searching for **"Raritan PDU bulk password reset script"**, **"Raritan PDU firmware update automation"**, **"raritan.rpc Python example"**, or **"how to script Raritan JSON-RPC API"**, this repo is built for exactly that use case: onboarding or maintaining a fleet of Raritan PDUs without clicking through the web UI one device at a time.
-
-## Why this repo exists
-
-Raritan PDUs (PX3, PX2, and compatible Legrand/Raritan-branded models) ship a Python JSON-RPC binding (`raritan.rpc`) that's well documented for single-device use, but there isn't much public tooling for **fleet-wide, unattended operations**, e.g. changing the default `admin` password on 200 freshly racked PDUs, or pushing a firmware image to every PDU in a data center row. These scripts fill that gap.
-
 ## Scripts in this repo
 
 | Script | Purpose |
