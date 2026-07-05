@@ -6,11 +6,11 @@ These scripts are designed for bootstrapping and maintaining groups of PDUs from
 
 ## Scripts in this repo
 
-| Script | Purpose | Details |
+| Script | Purpose | Documentation |
 |---|---|---|
-| [`bootstrap_pdu_passwords.py`](./bootstrap_pdu_passwords.py) | Bulk-changes the Raritan PDU `admin` password across a list of devices. | [Documentation](./docs/bootstrap_pdu_passwords.md) |
-| [`bootstrap_pdu_names_from_dns.py`](./bootstrap_pdu_names_from_dns.py) | Sets each PDU's user-defined name from reverse DNS. | [Documentation](./docs/bootstrap_pdu_names_from_dns.md) |
-| [`bootstrap_pdu_firmware.py`](./bootstrap_pdu_firmware.py) | Checks installed firmware versions or uploads and installs a firmware image across a list of devices. | [Documentation](./docs/bootstrap_pdu_firmware.md) |
+| [`bootstrap_pdu_passwords.py`](./bootstrap_pdu_passwords.py) | Bulk-changes the Raritan PDU `admin` password across a list of devices. | [README](./docs/bootstrap_pdu_passwords.md) / [What it does](./docs/pdu_password_script_explanation.txt) / [How to use](./docs/pdu_password_script_how_to_use.txt) |
+| [`bootstrap_pdu_names_from_dns.py`](./bootstrap_pdu_names_from_dns.py) | Sets each PDU's user-defined name from reverse DNS. | [README](./docs/bootstrap_pdu_names_from_dns.md) / [What it does](./docs/pdu_names_from_dns_script_explanation.txt) / [How to use](./docs/pdu_names_from_dns_script_how_to_use.txt) |
+| [`bootstrap_pdu_firmware.py`](./bootstrap_pdu_firmware.py) | Checks installed firmware versions or uploads and installs a firmware image across a list of devices. | [README](./docs/bootstrap_pdu_firmware.md) / [What it does](./docs/pdu_firmware_script_explanation.txt) / [How to use](./docs/pdu_firmware_script_how_to_use.txt) |
 
 ## Requirements
 
@@ -26,7 +26,7 @@ pip install raritan
 
 ## Common input file
 
-Scripts use a plain text IP/hostname list. The default filename is usually `pdus.txt`.
+Scripts use a plain text IP list. The default filename is usually `pdus.txt`.
 
 ```text
 # pdus.txt
