@@ -1,132 +1,143 @@
-# Raritan PDU Automation Scripts (Python)
+# Raritan PDU Automation Scripts
 
-Python command-line scripts for bulk-managing **Raritan PX3 / PX2 rack PDUs** over their **JSON-RPC API** (`raritan.rpc` / `python3-raritan`). Point a script at a text file of PDU IP addresses and it logs into every device in the list to bootstrap default admin passwords or roll out a firmware image, sequentially or in parallel, with dry-run support and clear per-device pass/fail reporting.
+Python command-line scripts for bulk-managing **Raritan PX-series rack PDUs** over the Raritan **JSON-RPC API** using the `raritan` Python package.
+
+These scripts are designed for bootstrapping and maintaining groups of PDUs from a simple text file of management IPs or hostnames. They support dry-runs, sequential or parallel processing, clear per-device results, logging, and safe failure handling.
 
 ## Scripts in this repo
 
-| Script | Purpose |
-|---|---|
-| [`bootstrap_pdu_passwords.py`](./bootstrap_pdu_passwords.py) | Bulk-changes the Raritan PDU `admin` password across a list of IPs. Handles first-boot/default-password bootstrap (including the HTTP 451 "password change required" flow), skips devices already updated, and reports per-device results. |
-| [`bootstrap_pdu_firmware.py`](./bootstrap_pdu_firmware.py) | Checks installed firmware version or uploads and installs a firmware image across a list of Raritan PDUs, with same-version protection, image validity/compatibility checks, and live update-progress polling. |
-
-More scripts will be added to this repo. Check back or watch this repo for updates.
+| Script | Purpose | Details |
+|---|---|---|
+| [`bootstrap_pdu_passwords.py`](./bootstrap_pdu_passwords.py) | Bulk-changes the Raritan PDU `admin` password across a list of devices. | [Documentation](./docs/bootstrap_pdu_passwords.md) |
+| [`bootstrap_pdu_names_from_dns.py`](./bootstrap_pdu_names_from_dns.py) | Sets each PDU's user-defined name from reverse DNS. | [Documentation](./docs/bootstrap_pdu_names_from_dns.md) |
+| [`bootstrap_pdu_firmware.py`](./bootstrap_pdu_firmware.py) | Checks installed firmware versions or uploads and installs a firmware image across a list of devices. | [Documentation](./docs/bootstrap_pdu_firmware.md) |
 
 ## Requirements
 
 - Python 3.8+
-- The `raritan` Python package (Raritan's official JSON-RPC client library):
-  ```bash
-  pip install raritan
-  ```
-- Network (HTTPS) access from wherever you run the script to each PDU's management interface
-- Admin credentials for the PDUs (default/bootstrap password, or current password)
+- The `raritan` Python package:
 
-## Common setup
+```bash
+pip install raritan
+```
 
-Both scripts share the same input format: a plain text file, one PDU IP address (or hostname) per line, with `#` for comments and blank lines ignored.
+- HTTPS access from the system running the scripts to each PDU management interface
+- Admin credentials for the target PDUs
+
+## Common input file
+
+Scripts use a plain text IP/hostname list. The default filename is usually `pdus.txt`.
 
 ```text
 # pdus.txt
-10.0.10.11
-10.0.10.12
-10.0.10.13
+10.10.5.11
+10.10.5.12
+10.10.5.13
 ```
 
-Pass this file with `--ips pdus.txt` (default filename is `pdus.txt` in the current directory for both scripts).
+Blank lines and comments are ignored. Some scripts also support inline comments:
 
-Both scripts:
-- Default to `--concurrency 1` (sequential, one PDU at a time). Raise it for faster runs across large fleets once you trust the settings.
-- Default to `--insecure` (skip TLS certificate verification), since most Raritan PDUs use self-signed certificates out of the box. Use `--no-insecure` to require valid certs.
-- Support `--dry-run` to preview what would happen without making any changes.
-- Support `-v` / `--verbose` for debug-level logging, and `--log-file <path>` to also write logs to a file for audit purposes.
-- Read credentials from an environment variable or an interactive `getpass` prompt. Passwords are never accepted as plain command-line arguments, to avoid exposure in shell history or process listings.
-- Print a per-device `OK` / `ERROR` result, followed by a final summary and a list of any failed IPs, and exit with a non-zero code if any device failed.
+```text
+10.10.5.11  # rack A
+10.10.5.12  # rack B
+```
 
-## `bootstrap_pdu_passwords.py`
+## Common behavior
 
-Rotates the `admin` password across a fleet of Raritan PDUs, useful right after unboxing/racking new units that still have the factory default password, or for periodic credential rotation.
+Most scripts support:
+
+- `--ips pdus.txt` to choose the target list
+- `--dry-run` to preview behavior without making changes
+- `--concurrency 1` by default for safe sequential processing
+- `--insecure` by default because many PDUs use self-signed TLS certificates
+- `--no-insecure` to require valid TLS certificates
+- `-v` / `--verbose` for debug logging
+- `--log-file <path>` to also write logs to a file
+- Interactive password prompting or environment-variable based credentials
+- Per-device `OK` / `ERROR` output
+- A final summary with failed IPs, if any
+
+## Quick examples
+
+Check what password changes would do:
 
 ```bash
-python bootstrap_pdu_passwords.py --ips pdus.txt
+python bootstrap_pdu_passwords.py --ips pdus.txt --dry-run -v
 ```
 
-You'll be prompted for the current/default admin password (or set `PDU_OLD_PASSWORD`) and the new password to set.
+Set PDU names from reverse DNS, dry-run first:
 
-Key flags:
+```bash
+python bootstrap_pdu_names_from_dns.py --ips pdus.txt --dry-run -v
+```
 
-| Flag | Default | Description |
-|---|---|---|
-| `--ips` | `pdus.txt` | File with one PDU IP per line |
-| `--old-password` | *(env/prompt)* | Current/default admin password. Prefer the `PDU_OLD_PASSWORD` env var or the interactive prompt over passing this on the CLI |
-| `--timeout` | `10` | Connection timeout (seconds) |
-| `--concurrency` | `1` | Number of PDUs processed in parallel |
-| `--insecure` / `--no-insecure` | insecure on | TLS certificate verification |
-| `--dry-run` | off | Check reachability/credentials only; no password is changed |
-| `--min-length` | `8` | Minimum accepted length for the new password |
-| `-v`, `--verbose` | off | Debug logging |
-| `--log-file` | none | Also write logs to this file |
+Check installed firmware versions:
 
-Each PDU is reported as one of: `changed`, `already_changed` (idempotent re-runs), `password_unchanged`, or a specific password-policy rejection reason (e.g. `password_too_short`, `password_needs_special`).
-
-## `bootstrap_pdu_firmware.py`
-
-Checks the currently installed firmware version, or uploads and installs a firmware image, across a fleet of Raritan PDUs. Designed to be conservative by default for unattended firmware rollouts.
-
-Check current firmware across the fleet:
 ```bash
 python bootstrap_pdu_firmware.py --ips pdus.txt --check -v
 ```
 
-Preview an update without touching any device:
+Preview a firmware update:
+
 ```bash
 python bootstrap_pdu_firmware.py --ips pdus.txt --update --image pdu-firmware.bin --dry-run -v
 ```
 
-Run the update for real:
-```bash
-python bootstrap_pdu_firmware.py --ips pdus.txt --update --image pdu-firmware.bin -v --log-file pdu-firmware.log
+## Script notes
+
+### `bootstrap_pdu_passwords.py`
+
+Bulk-rotates the Raritan PDU `admin` password. It is intended for initial bootstrap work, password rotation, and idempotent re-runs.
+
+The script avoids using full PDU model metadata as a login check because some Raritan Python bindings can fail while decoding model-specific fields. It uses a smaller authenticated user API call instead.
+
+### `bootstrap_pdu_names_from_dns.py`
+
+Sets each PDU's user-defined name from reverse DNS.
+
+For example, a PTR record like:
+
+```text
+pdu-row3-a12.example.com
 ```
 
-Key flags:
+would produce the PDU name:
 
-| Flag | Default | Description |
-|---|---|---|
-| `--check` / `--update` | *(required, one of)* | Read-only firmware check, or upload + install |
-| `--ips` | `pdus.txt` | File with one PDU IP per line |
-| `--image` | none | Firmware image file (required with `--update`) |
-| `--password` | *(env/prompt)* | Admin password. Prefer the `PDU_ADMIN_PASSWORD` env var or the interactive prompt over the CLI |
-| `--timeout` | `10` | Timeout (seconds) for normal API calls |
-| `--update-timeout` | `1800` | Max seconds to wait for the firmware update to report success/failure |
-| `--availability-timeout` | `600` | Max seconds to wait for the PDU to respond again after rebooting post-update |
-| `--poll-interval` | `10` | Seconds between update-status polls |
-| `--concurrency` | `1` | Number of PDUs processed in parallel |
-| `--insecure` / `--no-insecure` | insecure on | TLS certificate verification |
-| `--dry-run` | off | For `--update`: report what would happen, don't upload or install |
-| `--allow-same-version` | off | Proceed even if the image version matches the installed version (otherwise skipped) |
-| `-v`, `--verbose` | off | Debug logging |
-| `--log-file` | none | Also write logs to this file |
+```text
+PDU-ROW3-A12
+```
 
-Safety behavior for `--update`:
-- An uploaded image that the PDU reports as invalid or incompatible with the device aborts that device's update with a clear error; the update is never started.
-- An image that looks like a same-version reinstall is skipped by default (`--allow-same-version` to override).
-- An image that looks like a **downgrade** is treated as a failure and the update is not started. Downgrades are intentionally not automated by this script; if you need to downgrade a PDU, do it manually per Raritan's guidance.
-- Progress is polled live via the PDU's firmware update status endpoint until it reports success, failure, or a timeout.
+The script resolves and validates reverse DNS before contacting each PDU. Devices with missing or unusable reverse DNS are skipped and reported as failed. If multiple devices would derive the same PDU name, all colliding devices are skipped to avoid assigning duplicate names.
 
-## Exit codes (both scripts)
+This script intentionally uses raw JSON-RPC for the PDU name read/write path instead of the typed `pdumodel.Pdu.getSettings()` wrapper. On tested hardware, the typed wrapper failed while decoding optional settings fields. The script only needs the PDU name, so it reads and writes only that field.
+
+### `bootstrap_pdu_firmware.py`
+
+Checks installed firmware versions or performs firmware updates.
+
+Firmware updates are intentionally conservative:
+
+- Invalid or incompatible images are rejected before the update starts.
+- Same-version installs are skipped unless explicitly allowed.
+- Downgrades are not automated.
+- Update progress is polled and logged until success, failure, or timeout.
+
+## Exit codes
 
 | Code | Meaning |
 |---|---|
-| `0` | All PDUs completed successfully |
-| `1` | Bad arguments / setup problem (e.g. missing IP file, password mismatch) before any PDU was contacted |
-| `2` | One or more PDUs failed |
-| `130` | Interrupted (Ctrl+C) partway through a run |
+| `0` | All requested devices completed successfully |
+| `1` | Bad arguments or setup problem before device processing |
+| `2` | One or more devices failed |
+| `130` | Interrupted with Ctrl+C |
 
 ## Security notes
 
-- Passwords are **never** accepted as bare command-line arguments in either script. They're read from an environment variable or an interactive, hidden `getpass` prompt, to keep them out of shell history and process listings (e.g. `ps aux`).
-- TLS certificate verification is off by default (`--insecure`) to match Raritan PDUs' self-signed certificates out of the box. If your fleet uses a trusted internal CA or valid certs, run with `--no-insecure`.
-- Always run with `--dry-run` first against a new or unfamiliar batch of PDUs before making live changes.
+- Prefer environment variables or interactive password prompts over command-line password arguments.
+- Be careful with logs. Device names, IPs, and DNS names may identify internal infrastructure.
+- TLS verification is disabled by default for compatibility with self-signed PDU certificates. Use `--no-insecure` when your PDUs have trusted certificates.
+- Always run with `--dry-run` first against a new or unfamiliar group of PDUs.
 
-## Contributing / roadmap
+## Contributing
 
-This repo is actively growing. Planned/possible additions include further bulk Raritan PDU management scripts (SNMP, outlet/user configuration). Issues and pull requests for additional Raritan PDU automation scripts are welcome.
+Issues and pull requests for additional Raritan PDU automation scripts are welcome.
