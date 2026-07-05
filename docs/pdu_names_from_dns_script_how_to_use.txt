@@ -1,0 +1,609 @@
+How To Use bootstrap_pdu_names_from_dns.py on Windows
+======================================================
+
+This guide explains how to install Python on Windows and run the Raritan PDU
+names-from-DNS script.
+
+The script file is called:
+
+    bootstrap_pdu_names_from_dns.py
+
+The default IP list file is called:
+
+    pdus.txt
+
+The script reads pdus.txt, performs reverse DNS lookups, derives the desired
+PDU name from DNS, and sets the PDU's user-defined name to that value.
+
+This guide is written for Windows PowerShell.
+
+Before you start
+----------------
+
+You need:
+
+    A Windows computer
+    Network access to the PDU management IPs
+    HTTPS access to the PDUs, usually TCP port 443
+    The script file: bootstrap_pdu_names_from_dns.py
+    The current PDU password
+    A text file named pdus.txt with one PDU IP address per line
+    Working reverse DNS for the PDU IPs
+    Python 3 installed
+    The Python package named raritan installed
+
+Recommended folder layout
+-------------------------
+
+Create one working folder and keep everything there.
+
+Example:
+
+    C:\pdu-names
+
+Inside that folder, you should have:
+
+    C:\pdu-names\bootstrap_pdu_names_from_dns.py
+    C:\pdu-names\pdus.txt
+
+Step 1 - Install Python on Windows
+----------------------------------
+
+Use the official Python installer or Python install manager.
+
+Recommended simple method:
+
+1. Open this page in a browser:
+
+       https://www.python.org/downloads/
+
+2. Download Python for Windows.
+
+3. Run the installer.
+
+4. If the installer shows an option like this, enable it:
+
+       Add python.exe to PATH
+
+5. Finish the install.
+
+Another supported method is the Python install manager from the Microsoft Store.
+Python's current Windows documentation says the Python install manager can be
+installed from the Microsoft Store app or downloaded from python.org/downloads.
+
+Python.org also documents a WinGet install command for the Python install manager:
+
+    winget install 9NQ7512CXL7T
+
+Either method is fine as long as the python or py command works afterward.
+
+Step 2 - Open PowerShell
+------------------------
+
+Open PowerShell.
+
+A normal user PowerShell window is usually fine.
+
+You do not usually need Administrator PowerShell unless your local computer has
+restricted software install policies.
+
+Step 3 - Check that Python works
+--------------------------------
+
+Run:
+
+    py --version
+
+If that works, you should see a Python version.
+
+Example:
+
+    Python 3.14.6
+
+If py does not work, try:
+
+    python --version
+
+At least one of those should work.
+
+If neither command works, Python is not installed correctly or is not on PATH.
+
+Step 4 - Create the working folder
+----------------------------------
+
+Run:
+
+    mkdir C:\pdu-names
+    cd C:\pdu-names
+
+Copy this script into that folder:
+
+    bootstrap_pdu_names_from_dns.py
+
+Step 5 - Create pdus.txt
+------------------------
+
+Yes, you need to create the list of IPs.
+
+The default filename is:
+
+    pdus.txt
+
+It must be in the same folder where you run the script, unless you pass a
+different path with --ips.
+
+Create the file:
+
+    notepad .\pdus.txt
+
+Put one PDU management IP address per line.
+
+Example:
+
+    10.10.5.130
+    10.10.5.131
+    10.10.5.132
+    10.10.5.133
+    10.10.5.134
+
+Save the file and close Notepad.
+
+Blank lines are OK.
+Lines beginning with # are OK.
+Inline comments are OK.
+Duplicate IPs are skipped.
+
+Example with comments:
+
+    # Example PDU list
+    10.10.5.130  # pdu-row3-a12.example.com
+    10.10.5.131  # pdu-row3-a13.example.com
+
+Step 6 - Confirm reverse DNS
+----------------------------
+
+Before running the script, confirm the IPs have the expected reverse DNS.
+
+In PowerShell, you can test one IP with:
+
+    Resolve-DnsName 10.10.5.130 -Type PTR
+
+Good output should show the hostname that should become the PDU name.
+
+Example:
+
+    10.10.5.130 -> pdu-row3-a12.example.com
+
+The script will use the first part of the hostname and uppercase it:
+
+    pdu-row3-a12.example.com -> PDU-ROW3-A12
+
+If reverse DNS is wrong, fix DNS first. The script does not create or update
+DNS records. It only reads DNS.
+
+Step 7 - Create a Python virtual environment
+--------------------------------------------
+
+This keeps the Raritan package installed only for this project folder.
+
+Run:
+
+    py -m venv .venv
+
+Then activate it:
+
+    .\.venv\Scripts\Activate.ps1
+
+If PowerShell blocks activation, you may see an execution policy error.
+
+If that happens, run:
+
+    Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+
+Then try again:
+
+    .\.venv\Scripts\Activate.ps1
+
+When the virtual environment is active, your prompt usually starts with:
+
+    (.venv)
+
+Step 8 - Install the Raritan Python package
+-------------------------------------------
+
+With the virtual environment active, run:
+
+    python -m pip install --upgrade pip
+    python -m pip install raritan
+
+Then test the import:
+
+    python -c "import raritan.rpc; print('raritan import OK')"
+
+If you see this, the package import worked:
+
+    raritan import OK
+
+The raritan package is the Xerus JSON-RPC Python binding for Raritan and Server
+Technology devices.
+
+Step 9 - First dry run
+----------------------
+
+Before changing anything, run the script in dry-run mode.
+
+Run:
+
+    python .\bootstrap_pdu_names_from_dns.py --ips .\pdus.txt --dry-run -v
+
+The script will preflight reverse DNS first.
+
+If at least one PDU passes DNS preflight, the script will ask for the PDU
+password.
+
+Type the password and press Enter.
+
+The password will not show on screen while you type.
+
+Good dry-run output looks like this:
+
+    2026-07-05 10:12:04 INFO Preflighting reverse DNS for 2 PDU(s) [DRY RUN]...
+    2026-07-05 10:12:04 INFO 10.10.5.130: reverse DNS=pdu-row3-a12.example.com; target_name=PDU-ROW3-A12
+    2026-07-05 10:12:04 INFO 10.10.5.131: reverse DNS=pdu-row3-a13.example.com; target_name=PDU-ROW3-A13
+    2026-07-05 10:12:08 INFO Processing 2 PDU(s) [DRY RUN, concurrency=1, verify_cert=False]...
+    2026-07-05 10:12:09 INFO 10.10.5.130: OK - already_named; reverse DNS=pdu-row3-a12.example.com; current="PDU-ROW3-A12"
+    2026-07-05 10:12:10 INFO 10.10.5.131: OK - would_change; reverse DNS=pdu-row3-a13.example.com; current=""; target="PDU-ROW3-A13"
+    2026-07-05 10:12:10 INFO Done. OK=2 Failed=0
+
+The exact date, time, names, and current values will be different for your
+PDUs.
+
+The important results are:
+
+    OK - already_named
+    OK - would_change
+
+Both are good dry-run results.
+
+already_named means the PDU already matches DNS.
+would_change means the PDU does not match DNS, and the script would set it
+during a live run.
+
+Step 10 - Live run
+------------------
+
+After the dry-run output looks correct, run the live change:
+
+    python .\bootstrap_pdu_names_from_dns.py --ips .\pdus.txt -v --log-file .\pdu-names.log
+
+The script will ask for the PDU password.
+
+Good live output looks like this:
+
+    2026-07-05 10:20:04 INFO Preflighting reverse DNS for 2 PDU(s) [LIVE]...
+    2026-07-05 10:20:04 INFO 10.10.5.130: reverse DNS=pdu-row3-a12.example.com; target_name=PDU-ROW3-A12
+    2026-07-05 10:20:04 INFO 10.10.5.131: reverse DNS=pdu-row3-a13.example.com; target_name=PDU-ROW3-A13
+    2026-07-05 10:20:08 INFO Processing 2 PDU(s) [LIVE, concurrency=1, verify_cert=False]...
+    2026-07-05 10:20:09 INFO 10.10.5.130: OK - already_named; reverse DNS=pdu-row3-a12.example.com; current="PDU-ROW3-A12"
+    2026-07-05 10:20:10 INFO 10.10.5.131: OK - changed; reverse DNS=pdu-row3-a13.example.com; old=""; new="PDU-ROW3-A13"
+    2026-07-05 10:20:10 INFO Done. OK=2 Failed=0
+
+The important result is:
+
+    <PDU IP address>: OK - changed
+
+That means the script set the PDU name and verified it afterward.
+
+Step 11 - Confirm with another dry run
+--------------------------------------
+
+After the live run, run dry-run again:
+
+    python .\bootstrap_pdu_names_from_dns.py --ips .\pdus.txt --dry-run -v
+
+The expected final state is:
+
+    OK - already_named
+
+for every PDU that was successfully changed.
+
+Example:
+
+    2026-07-05 10:25:09 INFO 10.10.5.130: OK - already_named; reverse DNS=pdu-row3-a12.example.com; current="PDU-ROW3-A12"
+    2026-07-05 10:25:10 INFO 10.10.5.131: OK - already_named; reverse DNS=pdu-row3-a13.example.com; current="PDU-ROW3-A13"
+    2026-07-05 10:25:10 INFO Done. OK=2 Failed=0
+
+Common commands
+---------------
+
+Dry-run with the default pdus.txt:
+
+    python .\bootstrap_pdu_names_from_dns.py --ips .\pdus.txt --dry-run -v
+
+Live run with the default pdus.txt:
+
+    python .\bootstrap_pdu_names_from_dns.py --ips .\pdus.txt -v --log-file .\pdu-names.log
+
+Use a different IP list file:
+
+    python .\bootstrap_pdu_names_from_dns.py --ips .\my-pdus.txt --dry-run -v
+
+Use a different username:
+
+    python .\bootstrap_pdu_names_from_dns.py --ips .\pdus.txt --username admin --dry-run -v
+
+Use a longer timeout for slow networks:
+
+    python .\bootstrap_pdu_names_from_dns.py --ips .\pdus.txt --dry-run --timeout 30
+
+For first use, keep concurrency at 1.
+
+Use an environment variable for the PDU password
+------------------------------------------------
+
+This avoids typing the PDU password every run.
+
+In PowerShell:
+
+    $env:PDU_ADMIN_PASSWORD = "your-current-password"
+
+Then run:
+
+    python .\bootstrap_pdu_names_from_dns.py --ips .\pdus.txt --dry-run -v
+
+This environment variable only applies to the current PowerShell session.
+
+Close PowerShell when you are done.
+
+Avoid this when screen sharing or recording.
+
+Command-line options
+--------------------
+
+--ips PATH
+
+    IP list file.
+    Default: pdus.txt
+
+--username USERNAME
+
+    PDU username.
+    Default: admin
+
+--password PASSWORD
+
+    PDU password.
+    Supported, but not recommended because it can appear in shell history.
+
+--timeout SECONDS
+
+    Connection timeout for ordinary API calls, per PDU.
+    Default: 10
+
+--concurrency NUMBER
+
+    Number of PDUs to process in parallel.
+    Default: 1
+
+--dry-run
+
+    Show what would change but do not set PDU names.
+
+-v or --verbose
+
+    Show debug logging.
+
+--log-file PATH
+
+    Write a log file.
+
+--no-insecure
+
+    Require valid trusted HTTPS certificates.
+
+--insecure
+
+    Disable HTTPS certificate verification.
+    This is already the default because many PDUs use self-signed certificates.
+
+What to do if something fails
+-----------------------------
+
+Problem:
+
+    No IPs found in pdus.txt
+
+Fix:
+
+    Make sure pdus.txt exists in the folder where you are running the script.
+    Make sure it has one IP address per line.
+
+Problem:
+
+    invalid IP address
+
+Fix:
+
+    Check pdus.txt for a typo.
+    The script reports the line number.
+
+Problem:
+
+    python is not recognized
+    py is not recognized
+
+Fix:
+
+    Python is not installed correctly, or it is not on PATH.
+    Reinstall Python and enable the PATH option if offered.
+
+Problem:
+
+    No module named raritan
+
+Fix:
+
+    The Raritan Python package is not installed in the Python environment you
+    are using. Activate the virtual environment and run:
+
+        python -m pip install raritan
+
+Problem:
+
+    NO REVERSE DNS / PTR RECORD
+
+Fix:
+
+    The IP address does not have a PTR record. Add or fix the reverse DNS
+    record, then rerun the script.
+
+Problem:
+
+    DNS lookup failed
+
+Fix:
+
+    Check DNS resolution from the computer running the script.
+    Confirm the IP address is correct.
+    Confirm the DNS servers being used can resolve the PTR record.
+
+Problem:
+
+    hostname produced invalid PDU name
+
+Fix:
+
+    The hostname returned by reverse DNS produced a name the script will not
+    use. Fix the DNS name, then rerun the script.
+
+Problem:
+
+    duplicate target PDU name
+
+Fix:
+
+    Two or more IPs resolved to hostnames that produced the same PDU name.
+    Fix reverse DNS so each PDU has a unique name, then rerun the script.
+
+Problem:
+
+    Connection timed out
+    Connection refused
+    No route to host
+
+Fix:
+
+    Check the IP address.
+    Check that the PDU is powered and online.
+    Check that your computer can reach the PDU management network.
+    Check firewall rules for HTTPS/TCP 443.
+
+Problem:
+
+    HTTP Error 401
+    HTTP Error 403
+
+Fix:
+
+    The username or password is wrong, or the account does not have permission.
+    Confirm the credential and try again.
+
+Problem:
+
+    setSettings_failed_ret_1
+
+Fix:
+
+    The PDU rejected the setting update. Confirm that the account has
+    permission to change PDU settings, and confirm this PDU model/API supports
+    sparse setSettings updates for the PDU name.
+
+Problem:
+
+    verify_failed
+
+Fix:
+
+    The script attempted to set the name, but reading the name afterward did
+    not return the expected value. Check the PDU directly and review the log.
+
+Problem:
+
+    Some PDUs changed and others failed
+
+Fix:
+
+    Review the failed IPs shown at the end.
+    Fix the DNS, network, credential, or device-side issue for those PDUs.
+    Rerun dry-run on the failed IPs before attempting live mode again.
+
+Recommended first production process
+------------------------------------
+
+1. Put one or two test PDUs in pdus.txt.
+
+2. Confirm reverse DNS manually:
+
+       Resolve-DnsName 10.10.5.130 -Type PTR
+
+3. Dry-run the script:
+
+       python .\bootstrap_pdu_names_from_dns.py --ips .\pdus.txt --dry-run -v
+
+4. Review the reverse DNS and target_name values in the output.
+
+5. If dry-run looks correct, run live mode:
+
+       python .\bootstrap_pdu_names_from_dns.py --ips .\pdus.txt -v --log-file .\pdu-names.log
+
+6. Run dry-run again to confirm the final state:
+
+       python .\bootstrap_pdu_names_from_dns.py --ips .\pdus.txt --dry-run -v
+
+7. Confirm the output says already_named.
+
+8. Add the remaining intended PDU IPs to pdus.txt.
+
+9. Dry-run the full list.
+
+10. Run live mode on the full list only after the dry-run output looks correct.
+
+11. Save the log file for your records.
+
+Security reminders
+------------------
+
+Do not paste real passwords into tickets, chat, email, or screenshots.
+
+Do not use --password unless you have a specific reason.
+
+Prefer the interactive password prompt.
+
+Close PowerShell after using $env:PDU_ADMIN_PASSWORD.
+
+Keep pdus.txt limited to the intended PDUs.
+
+Confirm reverse DNS before running live mode.
+
+Review the log file before attaching or sharing it.
+
+Logs may include device IPs and DNS names.
+
+Source references
+-----------------
+
+Python for Windows documentation:
+
+    https://docs.python.org/3/using/windows.html
+
+Python downloads:
+
+    https://www.python.org/downloads/
+
+Python install manager release page:
+
+    https://www.python.org/downloads/release/pymanager-262/
+
+Raritan Python package:
+
+    https://pypi.org/project/raritan/

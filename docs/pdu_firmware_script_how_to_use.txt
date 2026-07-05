@@ -1,0 +1,652 @@
+How To Use bootstrap_pdu_firmware.py on Windows
+=================================================
+
+This guide explains how to install Python on Windows and run the Raritan PDU
+firmware check/update script.
+
+The script file is called:
+
+    bootstrap_pdu_firmware.py
+
+The default IP list file is called:
+
+    pdus.txt
+
+The script reads pdus.txt, connects to each PDU, and either checks the
+installed firmware version or uploads and installs a firmware image.
+
+This guide is written for Windows PowerShell.
+
+Before you start
+----------------
+
+You need:
+
+    A Windows computer
+    Network access to the PDU management IPs
+    HTTPS access to the PDUs, usually TCP port 443
+    The script file: bootstrap_pdu_firmware.py
+    The current admin password for the PDUs
+    A text file named pdus.txt with one PDU IP address per line
+    Python 3 installed
+    The Python package named raritan installed
+    If you plan to update firmware: the correct firmware image file (.bin)
+    for your PDU model
+
+Recommended folder layout
+-------------------------
+
+Create one working folder and keep everything there.
+
+Example:
+
+    C:\pdu-firmware
+
+Inside that folder, you should have:
+
+    C:\pdu-firmware\bootstrap_pdu_firmware.py
+    C:\pdu-firmware\pdus.txt
+    C:\pdu-firmware\pdu-firmware.bin      (only if updating)
+
+Step 1 - Install Python on Windows
+----------------------------------
+
+Use the official Python installer or Python install manager.
+
+Recommended simple method:
+
+1. Open this page in a browser:
+
+       https://www.python.org/downloads/
+
+2. Download Python for Windows.
+
+3. Run the installer.
+
+4. If the installer shows an option like this, enable it:
+
+       Add python.exe to PATH
+
+5. Finish the install.
+
+Another supported method is the Python install manager from the Microsoft Store.
+Python's current Windows documentation says the Python install manager can be
+installed from the Microsoft Store app or downloaded from python.org/downloads.
+
+Python.org also documents a WinGet install command for the Python install manager:
+
+    winget install 9NQ7512CXL7T
+
+Either method is fine as long as the python or py command works afterward.
+
+Step 2 - Open PowerShell
+------------------------
+
+Open PowerShell.
+
+A normal user PowerShell window is usually fine.
+
+You do not usually need Administrator PowerShell unless your local computer has
+restricted software install policies.
+
+Step 3 - Check that Python works
+--------------------------------
+
+Run:
+
+    py --version
+
+If that works, you should see a Python version.
+
+Example:
+
+    Python 3.14.6
+
+If py does not work, try:
+
+    python --version
+
+At least one of those should work.
+
+If neither command works, Python is not installed correctly or is not on PATH.
+
+Step 4 - Create the working folder
+----------------------------------
+
+Run:
+
+    mkdir C:\pdu-firmware
+    cd C:\pdu-firmware
+
+Copy this script into that folder:
+
+    bootstrap_pdu_firmware.py
+
+If you plan to update firmware, also copy the firmware image file into this
+folder.
+
+Step 5 - Create pdus.txt
+------------------------
+
+Yes, you need to create the list of IPs.
+
+The default filename is:
+
+    pdus.txt
+
+It must be in the same folder where you run the script, unless you pass a
+different path with --ips.
+
+Create the file:
+
+    notepad .\pdus.txt
+
+Put one PDU management IP address per line.
+
+Example:
+
+    10.42.98.10
+    10.42.98.11
+    10.42.98.12
+    10.42.98.13
+    10.42.98.14
+
+Save the file and close Notepad.
+
+Blank lines are OK.
+Lines beginning with # are OK.
+Duplicate IPs are skipped.
+
+Example with comments:
+
+    # Cabinet BJ16-BJ25 left-side PDUs
+    10.42.98.10
+    10.42.98.11
+    10.42.98.12
+
+    # Spare PDU
+    10.42.98.13
+
+Step 6 - Create a Python virtual environment
+--------------------------------------------
+
+This keeps the Raritan package installed only for this project folder.
+
+Run:
+
+    py -m venv .venv
+
+Then activate it:
+
+    .\.venv\Scripts\Activate.ps1
+
+If PowerShell blocks activation, you may see an execution policy error.
+
+If that happens, run:
+
+    Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+
+Then try again:
+
+    .\.venv\Scripts\Activate.ps1
+
+When the virtual environment is active, your prompt usually starts with:
+
+    (.venv)
+
+Step 7 - Install the Raritan Python package
+-------------------------------------------
+
+With the virtual environment active, run:
+
+    python -m pip install --upgrade pip
+    python -m pip install raritan
+
+Then test the import:
+
+    python -c "import raritan.rpc; print('raritan import OK')"
+
+If you see this, the package import worked:
+
+    raritan import OK
+
+The raritan package is the Xerus JSON-RPC Python binding for Raritan and Server
+Technology devices.
+
+Step 8 - Check current firmware
+--------------------------------
+
+Before doing anything else, check what firmware is currently installed.
+
+Run:
+
+    python .\bootstrap_pdu_firmware.py --ips .\pdus.txt --check -v
+
+The script will ask for the admin password.
+
+Type the password and press Enter.
+
+The password will not show on screen while you type.
+
+Good check output includes a timestamp, the log level, the PDU IP address,
+and the currently installed firmware version.
+
+If pdus.txt has one PDU, good check output looks like this:
+
+    2026-07-04 10:12:04 INFO Processing 1 PDU(s) [CHECK, concurrency=1, verify_cert=False]...
+    2026-07-04 10:12:05 INFO 10.42.98.137: OK - firmware=4.3.0.5-51180
+    2026-07-04 10:12:05 INFO Done. OK=1 Failed=0
+
+If pdus.txt has more than one PDU, good check output looks like this:
+
+    2026-07-04 10:12:04 INFO Processing 5 PDU(s) [CHECK, concurrency=1, verify_cert=False]...
+    2026-07-04 10:12:05 INFO 10.42.98.10: OK - firmware=4.3.0.5-51180
+    2026-07-04 10:12:06 INFO 10.42.98.11: OK - firmware=4.3.0.5-51180
+    2026-07-04 10:12:07 INFO 10.42.98.12: OK - firmware=4.3.0.5-51180
+    2026-07-04 10:12:08 INFO 10.42.98.13: OK - firmware=4.2.0-49210
+    2026-07-04 10:12:09 INFO 10.42.98.14: OK - firmware=4.3.0.5-51180
+    2026-07-04 10:12:09 INFO Done. OK=5 Failed=0
+
+The exact date, time, and version numbers will be different on your PDUs.
+
+Use this step any time you just want to know what firmware is installed,
+with no risk of changing anything. --check is always read-only.
+
+Step 9 - First update dry run
+-------------------------------
+
+If you are updating firmware, do a dry run before changing anything.
+
+Run:
+
+    python .\bootstrap_pdu_firmware.py --ips .\pdus.txt --update --image .\pdu-firmware.bin --dry-run -v
+
+The script will ask for the admin password.
+
+In dry-run mode, the script logs in and reads the current firmware version,
+but does not upload the image file and does not change anything.
+
+Good dry-run output looks like this:
+
+    2026-07-04 10:20:11 INFO Processing 1 PDU(s) [UPDATE DRY RUN, concurrency=1, verify_cert=False]...
+    2026-07-04 10:20:12 INFO 10.42.98.137: OK - would_update; current=4.3.0.5-51180; image=.\pdu-firmware.bin
+    2026-07-04 10:20:12 INFO Done. OK=1 Failed=0
+
+The important part is this:
+
+    <PDU IP address>: OK - would_update
+
+That means the script can reach the PDU and would attempt to upload and
+install the firmware image during a live run.
+
+Step 10 - Live update
+------------------------
+
+After the dry-run succeeds, run the live firmware update:
+
+    python .\bootstrap_pdu_firmware.py --ips .\pdus.txt --update --image .\pdu-firmware.bin -v --log-file .\pdu-firmware.log
+
+The script will ask for the admin password.
+
+This step takes longer than a password change. The script uploads the image,
+waits for the PDU to validate it, starts the update, and then polls the PDU
+until the update reports success or failure. The PDU reboots during this
+process, so this step can take several minutes per PDU.
+
+Good live output looks like this:
+
+    2026-07-04 10:30:02 INFO Processing 1 PDU(s) [UPDATE LIVE, concurrency=1, verify_cert=False]...
+    2026-07-04 10:30:03 INFO 10.42.98.137: current firmware=4.3.0.5-51180; uploading image=.\pdu-firmware.bin
+    2026-07-04 10:30:07 INFO 10.42.98.137: uploaded image info - version=4.3.13; valid=True; compatible=True; ...
+    2026-07-04 10:30:07 INFO 10.42.98.137: starting firmware update from 4.3.0.5-51180 to 4.3.13
+    2026-07-04 10:30:17 INFO 10.42.98.137: update status - state=UPDATE
+    2026-07-04 10:34:52 INFO 10.42.98.137: update status - state=SUCCESS
+    2026-07-04 10:35:10 INFO 10.42.98.137: OK - changed; old=4.3.0.5-51180; image_version=4.3.13; new=4.3.13
+    2026-07-04 10:35:10 INFO Done. OK=1 Failed=0
+
+The exact date, time, and version numbers will be different for your PDUs
+and firmware file.
+
+The important part is this:
+
+    <PDU IP address>: OK - changed
+
+That means the update completed, was confirmed successful, and the PDU
+reported the new firmware version afterward.
+
+Do not close PowerShell or unplug your network connection while a live
+update is running.
+
+Step 11 - Rerun if needed
+-----------------------------
+
+If a PDU already has the image version installed, a check first, or a rerun
+of --update, should report a line like this:
+
+    2026-07-04 10:40:15 INFO 10.42.98.137: OK - skipped_same_version; current=4.3.13; image_version=4.3.13
+
+That is not a problem. It means the script noticed the image matches what is
+already installed and did not install it again. Use --allow-same-version if
+you specifically want to reinstall the same version.
+
+Common commands
+----------------
+
+Check current firmware with the default pdus.txt:
+
+    python .\bootstrap_pdu_firmware.py --ips .\pdus.txt --check -v
+
+Dry-run an update with the default pdus.txt:
+
+    python .\bootstrap_pdu_firmware.py --ips .\pdus.txt --update --image .\pdu-firmware.bin --dry-run -v
+
+Live update with the default pdus.txt:
+
+    python .\bootstrap_pdu_firmware.py --ips .\pdus.txt --update --image .\pdu-firmware.bin --log-file .\pdu-firmware.log
+
+Use a different IP list file:
+
+    python .\bootstrap_pdu_firmware.py --ips .\my-pdus.txt --check
+
+Use a longer timeout for slow networks:
+
+    python .\bootstrap_pdu_firmware.py --ips .\pdus.txt --check --timeout 30
+
+For first use, keep concurrency at 1. This matters more for firmware updates
+than for password changes.
+
+Use an environment variable for the admin password
+-------------------------------------------------------
+
+This avoids typing the admin password every run.
+
+In PowerShell:
+
+    $env:PDU_ADMIN_PASSWORD = "your-current-password"
+
+Then run:
+
+    python .\bootstrap_pdu_firmware.py --ips .\pdus.txt --check
+
+This environment variable only applies to the current PowerShell session.
+
+Close PowerShell when you are done.
+
+Avoid this when screen sharing or recording.
+
+Command-line options
+---------------------
+
+--check
+
+    Read-only. Check the currently installed firmware version.
+    Required unless --update is used. Cannot be combined with --update.
+
+--update
+
+    Upload and install a firmware image.
+    Required unless --check is used. Cannot be combined with --check.
+    Requires --image.
+
+--ips PATH
+
+    IP list file.
+    Default: pdus.txt
+
+--image PATH
+
+    Firmware image file to upload.
+    Required with --update. Not used with --check.
+
+--password PASSWORD
+
+    Admin password.
+    Supported, but not recommended because it can appear in shell history.
+
+--timeout SECONDS
+
+    Connection timeout for ordinary API calls, per PDU.
+    Default: 10
+
+--update-timeout SECONDS
+
+    Maximum time to wait for the firmware update itself to report success
+    or failure.
+    Default: 1800 (30 minutes)
+
+--availability-timeout SECONDS
+
+    Maximum time to wait for the PDU to respond again after the update
+    completes and the PDU reboots.
+    Default: 600 (10 minutes)
+
+--poll-interval SECONDS
+
+    How often to check the update status while waiting.
+    Default: 10
+
+--concurrency NUMBER
+
+    Number of PDUs to process in parallel.
+    Default: 1
+
+--dry-run
+
+    For --update: check connectivity and current version only.
+    Does not upload or install anything.
+    Has no effect with --check, which is always read-only.
+
+--allow-same-version
+
+    Install the image even if its version appears the same as the currently
+    installed version.
+
+-v or --verbose
+
+    Show debug logging.
+
+--log-file PATH
+
+    Write a log file.
+
+--no-insecure
+
+    Require valid trusted HTTPS certificates.
+
+--insecure
+
+    Disable HTTPS certificate verification.
+    This is already the default because many PDUs use self-signed certificates.
+
+What to do if something fails
+---------------------------------
+
+Problem:
+
+    No IPs found in pdus.txt
+
+Fix:
+
+    Make sure pdus.txt exists in the folder where you are running the script.
+    Make sure it has one IP address per line.
+
+Problem:
+
+    python is not recognized
+    py is not recognized
+
+Fix:
+
+    Python is not installed correctly, or it is not on PATH.
+    Reinstall Python and enable the PATH option if offered.
+
+Problem:
+
+    No module named raritan
+
+Fix:
+
+    The Raritan Python package is not installed in the Python environment you
+    are using. Activate the virtual environment and run:
+
+        python -m pip install raritan
+
+Problem:
+
+    --image is required with --update.
+
+Fix:
+
+    Add --image and point it at your firmware .bin file.
+
+Problem:
+
+    Firmware image not found: <path>
+    Firmware image is empty: <path>
+
+Fix:
+
+    Check the path to the firmware file.
+    Confirm the file downloaded completely and is not 0 bytes.
+
+Problem:
+
+    uploaded firmware image is not valid
+
+Fix:
+
+    The file is probably not a genuine Raritan firmware image, or it is
+    corrupted. Re-download the firmware file from Raritan and try again.
+
+Problem:
+
+    uploaded firmware image is not compatible with this device
+
+Fix:
+
+    This firmware image is not intended for this PDU model. Confirm you
+    have the correct firmware file for this specific PDU model/family.
+
+Problem:
+
+    uploaded firmware image appears older than installed firmware
+
+Fix:
+
+    This script does not automate downgrades. If you intentionally need to
+    install an older firmware version, do this manually and follow Raritan's
+    guidance, or contact Raritan Support.
+
+Problem:
+
+    firmware update did not report success
+
+Fix:
+
+    Check the PDU directly. It may still be mid-update, or the update may
+    have failed. Consider increasing --update-timeout for slower devices.
+
+Problem:
+
+    device did not return before timeout
+
+Fix:
+
+    The update likely finished, but the PDU took longer than
+    --availability-timeout to respond again. Check the PDU directly, and
+    consider increasing --availability-timeout.
+
+Problem:
+
+    Connection timed out
+    Connection refused
+    No route to host
+
+Fix:
+
+    Check the IP address.
+    Check that the PDU is powered and online.
+    Check that your computer can reach the PDU management network.
+    Check firewall rules for HTTPS/TCP 443.
+
+Problem:
+
+    Some PDUs updated and others failed
+
+Fix:
+
+    Review the failed IPs shown at the end.
+    Check each failed PDU directly before rerunning.
+    Fix the issue, then rerun --check on the failed IPs before attempting
+    --update again.
+
+Recommended first production process
+----------------------------------------
+
+1. Put one test PDU in pdus.txt.
+
+2. Check current firmware:
+
+       python .\bootstrap_pdu_firmware.py --ips .\pdus.txt --check -v
+
+3. Dry-run the update:
+
+       python .\bootstrap_pdu_firmware.py --ips .\pdus.txt --update --image .\pdu-firmware.bin --dry-run -v
+
+4. If dry-run looks good, run the live update:
+
+       python .\bootstrap_pdu_firmware.py --ips .\pdus.txt --update --image .\pdu-firmware.bin --log-file .\pdu-firmware.log
+
+5. Confirm the PDU is running the expected new firmware version. You can use
+   --check to confirm.
+
+6. Add the remaining PDU IPs to pdus.txt.
+
+7. Check current firmware on all of them.
+
+8. Dry-run again.
+
+9. Run the live update again.
+
+10. Save the log file for your records.
+
+Security reminders
+-------------------
+
+Do not paste real passwords into tickets, chat, email, or screenshots.
+
+Do not use --password unless you have a specific reason.
+
+Prefer the interactive password prompt.
+
+Close PowerShell after using $env:PDU_ADMIN_PASSWORD.
+
+Keep pdus.txt limited to the intended PDUs.
+
+Confirm the firmware image file is the correct, current file for this PDU
+model before a live update.
+
+Do not interrupt (Ctrl+C) a live update once it has started for a given PDU.
+If you do, the update keeps running on the PDU; only the script's monitoring
+of it stops. Check that PDU directly afterward.
+
+Review the log file before attaching or sharing it.
+
+Source references
+------------------
+
+Python for Windows documentation:
+
+    https://docs.python.org/3/using/windows.html
+
+Python downloads:
+
+    https://www.python.org/downloads/
+
+Python install manager release page:
+
+    https://www.python.org/downloads/release/pymanager-262/
+
+Raritan Python package:
+
+    https://pypi.org/project/raritan/

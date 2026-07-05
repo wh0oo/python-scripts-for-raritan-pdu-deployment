@@ -1,0 +1,470 @@
+Raritan PDU Names From DNS Script - What It Does
+=====================================================
+
+File being documented:
+
+    bootstrap_pdu_names_from_dns.py
+
+Purpose
+-------
+
+This script sets the user-defined name on each Raritan PDU based on reverse
+DNS.
+
+It reads a list of PDU management IP addresses, performs a reverse DNS lookup
+for each IP, takes the first hostname label, uppercases it, and sets the PDU
+name to that value.
+
+Generic example:
+
+    10.10.5.130 -> pdu-row3-a12.example.com -> PDU-ROW3-A12
+
+This is useful when DNS is already the source of truth for how PDUs should be
+named. Instead of manually logging in to each PDU and typing the name, the
+script derives the name from DNS and applies it consistently.
+
+What the script changes
+------------------------
+
+In live mode, the script changes one setting on the PDU:
+
+    The user-defined PDU name
+
+It sets that name to the uppercase version of the first label from reverse DNS.
+
+Example:
+
+    Reverse DNS:    pdu-row3-a12.example.com
+    PDU name set:   PDU-ROW3-A12
+
+What the script does NOT change
+---------------------------------
+
+This script does not change the admin password.
+It does not update firmware.
+It does not turn outlets on or off.
+It does not change network settings.
+It does not configure SNMP, syslog, NTP, DNS, users, roles, outlets, or sensors.
+It does not create or delete accounts.
+It does not create or modify DNS records.
+It only reads DNS and uses the result to set the PDU's own name field.
+
+Modes
+-----
+
+The script has two practical modes:
+
+    Dry-run mode    Show what would be changed, but do not set any PDU names.
+    Live mode       Set the PDU name when the current name does not match DNS.
+
+Dry-run mode is enabled with:
+
+    --dry-run
+
+There is no separate --check option for this script. A dry-run is the safe
+read-only check.
+
+High-level flow
+---------------
+
+For each PDU IP address, the script does this:
+
+1. Read the IP list from pdus.txt, or from the file provided with --ips.
+
+2. Preflight reverse DNS for every IP before logging in to any PDU.
+
+3. For each IP, derive the target PDU name from reverse DNS.
+
+4. Validate that the derived name is usable as a host-style name.
+
+5. Detect duplicate derived names. If two or more IPs produce the same target
+   name, all of the colliding IPs are skipped and reported as failed.
+
+6. If at least one PDU passes preflight, prompt for the PDU password unless it
+   was provided by environment variable or command-line option.
+
+7. Log in to each PDU that passed preflight.
+
+8. Read the current PDU name.
+
+9. If the current name already matches the target name, report:
+
+       OK - already_named
+
+10. If --dry-run was given and the name does not match, report:
+
+       OK - would_change
+
+    No changes are made in dry-run mode.
+
+11. In live mode, if the name does not match, set the PDU name.
+
+12. Read the PDU name again to verify the change.
+
+13. Report one final summary showing how many PDUs succeeded and how many
+    failed.
+
+Input file
+----------
+
+The default IP list file is:
+
+    pdus.txt
+
+The script expects one PDU IP address per line.
+
+Blank lines are ignored.
+Lines that start with # are ignored.
+Inline comments are allowed after #.
+Duplicate IP addresses are skipped.
+Invalid IP addresses fail loudly with the line number.
+
+Example pdus.txt:
+
+    # Example PDU list
+    10.10.5.130
+    10.10.5.131
+    10.10.5.132
+
+Example with inline comments:
+
+    10.10.5.130  # row 3, rack A12
+    10.10.5.131  # row 3, rack A13
+
+Reverse DNS requirement
+-----------------------
+
+This script depends on reverse DNS.
+
+Every IP must have a PTR record that resolves to a hostname.
+
+Example:
+
+    10.10.5.130 -> pdu-row3-a12.example.com
+
+The script then uses only the first label:
+
+    pdu-row3-a12
+
+and uppercases it:
+
+    PDU-ROW3-A12
+
+If an IP has no reverse DNS, that IP is marked as failed and skipped. The
+script still processes the other IPs that passed preflight.
+
+If reverse DNS returns an empty or unusable hostname, that IP is marked as
+failed and skipped.
+
+Duplicate name protection
+-------------------------
+
+Before logging in to any PDU, the script checks for duplicate target names.
+
+If two IP addresses produce the same target PDU name, all of the IPs involved
+in that collision are skipped and reported as failed.
+
+Example:
+
+    10.10.5.130 -> pdu-row3-a12.example.com -> PDU-ROW3-A12
+    10.10.5.131 -> pdu-row3-a12.example.com -> PDU-ROW3-A12
+
+Both IPs are skipped.
+
+The script does this because it cannot safely know which PDU should get that
+name. It is safer to report the DNS problem and make no change to the affected
+devices.
+
+Password
+--------
+
+The script needs the current PDU password for the selected username.
+
+The default username is:
+
+    admin
+
+The password can be provided three ways:
+
+    1. By typing it when prompted
+    2. By setting the environment variable PDU_ADMIN_PASSWORD
+    3. By using --password on the command line
+
+The safest normal method is to type it when prompted.
+
+Passing a password on the command line is supported, but it is less safe
+because command-line arguments can be visible in shell history and process
+listings.
+
+The script does not print the password while you type it.
+
+Important password behavior
+---------------------------
+
+The script performs DNS preflight before asking for the password.
+
+If no PDUs pass DNS preflight, the script does not ask for the password,
+because there is nothing safe to process.
+
+Dry-run mode
+------------
+
+Dry-run mode is the safest first run.
+
+Run with:
+
+    --dry-run
+
+In dry-run mode, the script:
+
+    Reads the IP list
+    Performs reverse DNS preflight
+    Logs in to PDUs that passed preflight
+    Reads the current PDU name
+    Reports whether each PDU already matches DNS or would be changed
+
+Dry-run mode does not set the PDU name.
+
+A successful dry-run result may look like:
+
+    OK - already_named; reverse DNS=pdu-row3-a12.example.com; current="PDU-ROW3-A12"
+
+or:
+
+    OK - would_change; reverse DNS=pdu-row3-a13.example.com; current=""; target="PDU-ROW3-A13"
+
+Live mode
+---------
+
+Live mode is used when --dry-run is not given.
+
+In live mode, the script still starts with DNS preflight. It still skips IPs
+with missing reverse DNS, invalid derived names, or duplicate target names.
+
+For each PDU that passes preflight, the script logs in, reads the current PDU
+name, and compares it to the target name.
+
+If the name already matches, the script reports:
+
+    OK - already_named
+
+If the name does not match, the script sets the new name, reads it back, and
+reports:
+
+    OK - changed
+
+If verification fails, the script reports an error with the current name,
+target name, and verified value.
+
+Idempotency
+-----------
+
+The script is intended to be safe to rerun.
+
+After a successful live run, running the script again should report:
+
+    OK - already_named
+
+for PDUs that already match their reverse DNS name.
+
+This makes the script useful both for first-time setup and for confirming that
+PDU names still match DNS later.
+
+Concurrency
+-----------
+
+The script can process multiple PDUs in parallel.
+
+The option is:
+
+    --concurrency NUMBER
+
+The default is:
+
+    1
+
+For first use, leave it at 1.
+
+The script blocks invalid values like 0 or negative numbers.
+
+TLS certificate behavior
+--------------------------
+
+By default, the script does not verify the PDU HTTPS certificate.
+
+That is intentional.
+
+Default behavior:
+
+    TLS certificate verification is disabled.
+
+If you have valid trusted certificates on the PDUs and want strict checking,
+run with:
+
+    --no-insecure
+
+Logging
+-------
+
+By default, the script prints progress to the console.
+
+You can also write a log file with:
+
+    --log-file pdu-names.log
+
+You can enable debug logging with:
+
+    -v
+
+or:
+
+    --verbose
+
+Example:
+
+    python .\bootstrap_pdu_names_from_dns.py --ips .\pdus.txt --dry-run -v
+
+Exit codes
+----------
+
+The script exits with these codes:
+
+    0     All PDUs processed successfully
+    1     Local setup/input problem, such as invalid IP syntax, no IPs,
+          invalid concurrency, or an interrupted DNS preflight
+    2     One or more PDUs failed, including DNS preflight failures,
+          duplicate derived names, login failures, API failures, or
+          verification failures
+    130   The script was interrupted with Ctrl+C
+
+Common results
+--------------
+
+OK - already_named
+
+    The PDU's current name already matches the name derived from reverse DNS.
+    Nothing was changed.
+
+OK - would_change
+
+    Dry-run mode. The PDU's current name does not match the DNS-derived target
+    name. Nothing was changed.
+
+OK - changed
+
+    Live mode. The PDU name was changed and then verified.
+
+ERROR - NO REVERSE DNS / PTR RECORD
+
+    The IP address does not have usable reverse DNS. The PDU was not contacted.
+
+ERROR - DNS lookup failed
+
+    The reverse DNS lookup failed. The PDU was not contacted.
+
+ERROR - hostname produced invalid PDU name
+
+    Reverse DNS returned a name that did not produce a valid target PDU name.
+
+ERROR - duplicate target PDU name
+
+    Two or more IPs produced the same target name. All colliding IPs were
+    skipped.
+
+ERROR - setSettings_failed_ret_1
+
+    The PDU rejected the name change request. On tested bindings, return code
+    0 means OK and return code 1 means invalid parameters.
+
+ERROR - verify_failed
+
+    The script tried to set the name, but reading the name afterward did not
+    return the expected value.
+
+Important implementation notes
+------------------------------
+
+The script uses the Raritan Python package and the Xerus JSON-RPC API.
+
+For login verification, it uses a small authenticated user API call:
+
+    usermgmt.User(...).getInfo()
+
+It intentionally does not use:
+
+    pdumodel.Pdu(...).getMetaData()
+
+because that call can fail on some tested PDU/API/library combinations while
+decoding unrelated fields.
+
+For reading and setting the PDU name, the script intentionally uses raw
+JSON-RPC calls against:
+
+    /model/pdu/0
+
+It does not use the typed pdumodel.Pdu.getSettings() wrapper for this work.
+On tested hardware, the typed wrapper failed while decoding the full Settings
+structure because the device response omitted fields such as inletWiring.
+
+The script only needs the name field, so it reads the raw getSettings response
+directly and sends a sparse setSettings request containing only:
+
+    {"settings": {"name": "<target-name>"}}
+
+This avoids depending on a full decoded PDU settings object when only the
+name needs to be changed.
+
+Important assumptions
+---------------------
+
+The script assumes:
+
+    The PDU is reachable over HTTPS.
+    The PDU supports the Raritan/Xerus JSON-RPC API.
+    The Python raritan package is installed.
+    The account can authenticate to the PDU.
+    The account has permission to change the PDU name.
+    The IP list file exists and contains the correct PDU management IPs.
+    Reverse DNS is correct and should be treated as the source of truth.
+    The PDU name is stored under /model/pdu/0 in the tested API family.
+
+Safety notes
+------------
+
+Run --dry-run first.
+
+Review the reverse DNS and target names before running live mode.
+
+Keep pdus.txt limited to the intended PDUs.
+
+Use --concurrency 1 for first use.
+
+Save a log file for audit records.
+
+Do not include passwords in screenshots, tickets, email, or chat.
+
+Review the log file before attaching or sharing it, because logs may include
+device IPs and DNS names.
+
+Suggested first test
+--------------------
+
+Use one or two non-critical PDUs in pdus.txt first.
+
+Dry-run the name change:
+
+    python .\bootstrap_pdu_names_from_dns.py --ips .\pdus.txt --dry-run -v
+
+If the dry-run output looks correct, run the live change:
+
+    python .\bootstrap_pdu_names_from_dns.py --ips .\pdus.txt -v --log-file .\pdu-names.log
+
+Then run dry-run again:
+
+    python .\bootstrap_pdu_names_from_dns.py --ips .\pdus.txt --dry-run -v
+
+The final dry-run should show:
+
+    OK - already_named
+
+for every PDU that was changed successfully.

@@ -1,0 +1,384 @@
+Raritan PDU Firmware Script - What It Does
+===========================================
+
+File being documented:
+
+    bootstrap_pdu_firmware.py
+
+Purpose
+-------
+
+This script checks the installed firmware version, or uploads and installs a
+firmware image, across a list of Raritan PDU management IP addresses.
+
+It has two modes:
+
+    --check    Read-only. Reports the currently installed firmware version.
+    --update   Uploads a firmware image and installs it.
+
+Exactly one of --check or --update must be given.
+
+What the script changes
+------------------------
+
+In --check mode, nothing is changed.
+
+In --update mode, the script:
+
+    Uploads the firmware image you provide to each PDU.
+    Installs that firmware image on each PDU (unless it is skipped or
+    rejected, see below).
+    The PDU reboots as part of a normal firmware update.
+
+What the script does NOT change
+---------------------------------
+
+This script does not change the admin password.
+It does not turn outlets on or off.
+It does not change network settings.
+It does not configure SNMP, syslog, NTP, DNS, users, roles, or names.
+It does not create or delete accounts.
+It does not automate firmware downgrades.
+
+High-level flow for --check
+-----------------------------
+
+For each PDU IP address, the script does this:
+
+1. Log in as admin.
+
+2. Read the currently installed firmware version.
+
+3. Report it:
+
+       OK - firmware=<version>
+
+No files are uploaded and nothing is changed in --check mode.
+
+High-level flow for --update
+-------------------------------
+
+For each PDU IP address, the script does this:
+
+1. Log in as admin and read the currently installed firmware version.
+
+2. If --dry-run was given, stop here and report:
+
+       OK - would_update; current=<version>; image=<path>
+
+   No file is uploaded in dry-run mode.
+
+3. Upload the firmware image file to the PDU.
+
+4. Ask the PDU for information about the uploaded image, including:
+
+       version
+       valid
+       compatible
+       product
+       platform
+       min_required_version
+       min_downgrade_version
+
+5. If the PDU reports the image as not valid, or not compatible with the
+   device, the script discards the image and reports an error for that PDU.
+   The update is not started.
+
+6. If the image version appears the same as the currently installed version,
+   the script discards the image and reports:
+
+       OK - skipped_same_version; current=<version>; image_version=<version>
+
+   Use --allow-same-version to install anyway.
+
+7. If the image version appears older than the currently installed version,
+   the script discards the image and reports an error for that PDU. This
+   script does not automate downgrades. If you need to install an older
+   firmware version, do this manually and follow Raritan's guidance.
+
+8. If the version comparison cannot be determined from the version strings,
+   the script proceeds anyway, because the image was already confirmed valid
+   and compatible in step 5. This is logged as a warning.
+
+9. Start the firmware update.
+
+10. Poll the PDU's firmware update status until it reports success, failure,
+    or a timeout is reached. The PDU will reboot during this step, so
+    temporary communication failures during this window are expected and are
+    logged at debug level, not treated as errors.
+
+11. After the update reports success, wait for the PDU management interface
+    to respond again and confirm the new firmware version.
+
+12. Report:
+
+        OK - changed; old=<version>; image_version=<version>; new=<version>
+
+Input file
+----------
+
+The default IP list file is:
+
+    pdus.txt
+
+The script expects one PDU IP address per line.
+
+Blank lines are ignored.
+Lines that start with # are ignored.
+Duplicate IP addresses are skipped.
+
+Example pdus.txt:
+
+    # Cabinet BJ16-BJ25 PDUs
+    10.10.5.10
+    10.10.5.11
+    10.10.5.12
+
+Password
+--------
+
+The script needs one password: the current admin password.
+
+It can be provided three ways:
+
+    1. By typing it when prompted
+    2. By setting the environment variable PDU_ADMIN_PASSWORD
+    3. By using --password on the command line
+
+The safest normal method is to type it when prompted.
+
+Passing a password on the command line is supported, but it is less safe
+because command-line arguments can be visible in shell history and process
+listings.
+
+The script does not print the password while you type it.
+
+Firmware image file
+--------------------
+
+--image is required with --update. It is not used with --check.
+
+The script checks that the image file exists before doing anything else.
+In a live run (not --dry-run), it also checks that the file is not empty.
+
+Same-version and downgrade protection
+----------------------------------------
+
+The script compares the version number found in the uploaded image against
+the version currently installed, using the numbers in each version string
+(for example, 4.3.13 or 4.3.13-52884).
+
+    Same version    Skipped by default. Use --allow-same-version to
+                     install anyway.
+
+    Older version    Always treated as a failure. There is no option to
+                     allow this. Downgrades are not automated by this
+                     script.
+
+    Cannot compare   The script proceeds, because the image was already
+                     confirmed valid and compatible by the PDU itself.
+
+Dry-run mode
+------------
+
+Dry-run mode only applies to --update. It has no effect with --check, and
+the script prints a warning if you combine --check with --dry-run.
+
+In --update --dry-run mode, the script logs in and reads the current firmware
+version, but does not upload any file and does not change anything.
+
+A successful dry-run result looks like:
+
+    OK - would_update; current=<version>; image=<path>
+
+Concurrency
+-----------
+
+The script can process multiple PDUs in parallel.
+
+The option is:
+
+    --concurrency NUMBER
+
+The default is:
+
+    1
+
+For first use, and especially for firmware updates, leave it at 1.
+
+The script blocks invalid values like 0 or negative numbers.
+
+Timeouts
+--------
+
+There are three separate timeout settings:
+
+    --timeout SECONDS
+        Timeout for ordinary API calls (login, reading version, and so on).
+        Default: 10
+
+    --update-timeout SECONDS
+        Maximum time to wait for the firmware update itself to report
+        success or failure. Default: 1800 (30 minutes)
+
+    --availability-timeout SECONDS
+        Maximum time to wait for the PDU management interface to respond
+        again after the update completes and the PDU reboots.
+        Default: 600 (10 minutes)
+
+--poll-interval SECONDS controls how often the script checks the update
+status while waiting. Default: 10
+
+TLS certificate behavior
+--------------------------
+
+By default, the script does not verify the PDU HTTPS certificate.
+
+That is intentional.
+
+Default behavior:
+
+    TLS certificate verification is disabled.
+
+If you have valid trusted certificates on the PDUs and want strict checking,
+run with:
+
+    --no-insecure
+
+Logging
+-------
+
+By default, the script prints progress to the console.
+
+You can also write a log file with:
+
+    --log-file pdu-firmware.log
+
+You can enable debug logging with:
+
+    -v
+
+or:
+
+    --verbose
+
+Example:
+
+    python .\bootstrap_pdu_firmware.py --ips .\pdus.txt --check -v
+
+Exit codes
+----------
+
+The script exits with these codes:
+
+    0     All PDUs processed successfully
+    1     Local setup/input problem, such as no IPs, missing/empty image
+          file, missing --image with --update, or invalid concurrency or
+          poll-interval
+    2     One or more PDUs failed
+    130   The script was interrupted with Ctrl+C
+
+Common results
+--------------
+
+OK - firmware=<version>
+
+    --check mode. Reports the currently installed firmware version.
+
+OK - would_update
+
+    --update --dry-run mode. Reports the current version and the image that
+    would be uploaded. Nothing was uploaded or changed.
+
+OK - changed
+
+    The firmware update completed, was confirmed successful, and the PDU
+    reported the new version afterward.
+
+OK - skipped_same_version
+
+    The uploaded image version matches the currently installed version.
+    The image was discarded and nothing was installed.
+
+ERROR - uploaded firmware image is not valid
+
+    The PDU rejected the uploaded file as an invalid firmware image.
+
+ERROR - uploaded firmware image is not compatible with this device
+
+    The PDU accepted the file as a valid image, but reported that it is not
+    compatible with this specific device/model.
+
+ERROR - uploaded firmware image appears older than installed firmware
+
+    The image looked like a downgrade. The image was discarded. This script
+    does not automate downgrades.
+
+ERROR - firmware update did not report success
+
+    The update was started, but did not report success before the update
+    timeout, or it reported failure.
+
+ERROR - device did not return before timeout
+
+    The update likely finished, but the PDU management interface did not
+    respond again within --availability-timeout.
+
+Important assumptions
+------------------------
+
+The script assumes:
+
+    The PDU is reachable over HTTPS.
+    The username is admin.
+    The PDU supports the Raritan/Xerus JSON-RPC firmware API.
+    The Python raritan package is installed.
+    The firmware image file is the correct file for this PDU model/family.
+    The person running the script knows the current admin password.
+    The IP list file exists and contains the correct PDU management IPs.
+
+A note on Ctrl+C during --update
+-----------------------------------
+
+If you interrupt the script with Ctrl+C after a PDU's firmware update has
+already started, the update keeps running on that PDU. Interrupting the
+script only stops the script from monitoring it; it does not stop the
+update in progress. Check any PDU that had already started an update
+directly before assuming anything about its state.
+
+Safety notes
+------------
+
+Run --check first to see what firmware every PDU is currently running.
+
+Run --update --dry-run before any live --update run.
+
+Use --concurrency 1 the first time, and consider keeping it at 1 for
+firmware updates generally, since an interrupted or failed update on one
+PDU is a bigger operational concern than an interrupted password change.
+
+Keep the IP list small and controlled for a first live update.
+
+Confirm you have the correct, current firmware image for this PDU model
+before running a live update against your full fleet.
+
+Save a log file for audit records.
+
+Suggested first test
+---------------------
+
+Use one PDU in pdus.txt first.
+
+Check current firmware:
+
+    python .\bootstrap_pdu_firmware.py --ips .\pdus.txt --check -v
+
+Dry-run the update:
+
+    python .\bootstrap_pdu_firmware.py --ips .\pdus.txt --update --image .\pdu-firmware.bin --dry-run -v
+
+If that looks good, run the live update:
+
+    python .\bootstrap_pdu_firmware.py --ips .\pdus.txt --update --image .\pdu-firmware.bin -v --log-file .\pdu-firmware.log
+
+After that works on one PDU, add the remaining PDUs to pdus.txt.
