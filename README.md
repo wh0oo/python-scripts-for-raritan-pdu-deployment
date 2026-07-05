@@ -2,7 +2,7 @@
 
 Python command-line scripts for bulk-managing **Raritan PX-series rack PDUs** over the Raritan **JSON-RPC API** using the `raritan` Python package.
 
-These scripts are designed for bootstrapping and maintaining groups of PDUs from a simple text file of management IPs or hostnames. They support dry-runs, sequential or parallel processing, clear per-device results, logging, and safe failure handling.
+These scripts are designed for bootstrapping and maintaining groups of PDUs from a simple text file of management IPs. They support dry-runs, sequential or parallel processing, clear per-device results, logging, and safe failure handling.
 
 ## Scripts in this repo
 
