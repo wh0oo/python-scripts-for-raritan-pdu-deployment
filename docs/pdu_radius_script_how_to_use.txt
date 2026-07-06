@@ -1,0 +1,779 @@
+How To Use bootstrap_pdu_radius.py on Windows
+===============================================
+
+This guide explains how to install Python on Windows and run the Raritan PDU
+RADIUS staging script.
+
+The script file is called:
+
+    bootstrap_pdu_radius.py
+
+The default IP list file is called:
+
+    pdus.txt
+
+The default config file is called:
+
+    radius_config.json
+
+The script reads pdus.txt, connects to each PDU, and stages RADIUS-related
+configuration from radius_config.json.
+
+This guide is written for Windows PowerShell.
+
+Before you start
+----------------
+
+You need:
+
+    A Windows computer
+    Network access to the PDU management IPs
+    HTTPS access to the PDUs, usually TCP port 443
+    The script file: bootstrap_pdu_radius.py
+    A text file named pdus.txt with one PDU IP address per line
+    A JSON config file named radius_config.json
+    Python 3 installed
+    The Python package named raritan installed
+    A PDU admin username and password
+    The RADIUS shared secret, for live RADIUS server configuration
+    The new local-user password, for live user creation
+
+Important:
+
+    Do not put the RADIUS shared secret in radius_config.json.
+    Do not put the local-user password in radius_config.json.
+    The config file should contain only structural data.
+
+Recommended folder layout
+-------------------------
+
+Create one working folder and keep everything there.
+
+Example:
+
+    C:\pdu-radius
+
+Inside that folder, you should have:
+
+    C:\pdu-radius\bootstrap_pdu_radius.py
+    C:\pdu-radius\pdus.txt
+    C:\pdu-radius\radius_config.json
+
+Step 1 - Install Python on Windows
+----------------------------------
+
+Use the official Python installer or Python install manager.
+
+Recommended simple method:
+
+1. Open this page in a browser:
+
+       https://www.python.org/downloads/
+
+2. Download Python for Windows.
+
+3. Run the installer.
+
+4. If the installer shows an option like this, enable it:
+
+       Add python.exe to PATH
+
+5. Finish the install.
+
+Another supported method is the Python install manager from the Microsoft Store.
+Python's current Windows documentation says the Python install manager can be
+installed from the Microsoft Store app or downloaded from python.org/downloads.
+
+Python.org also documents a WinGet install command for the Python install manager:
+
+    winget install 9NQ7512CXL7T
+
+Either method is fine as long as the python or py command works afterward.
+
+Step 2 - Open PowerShell
+------------------------
+
+Open PowerShell.
+
+A normal user PowerShell window is usually fine.
+
+You do not usually need Administrator PowerShell unless your local computer has
+restricted software install policies.
+
+Step 3 - Check that Python works
+--------------------------------
+
+Run:
+
+    py --version
+
+If that works, you should see a Python version.
+
+Example:
+
+    Python 3.14.6
+
+If py does not work, try:
+
+    python --version
+
+At least one of those should work.
+
+If neither command works, Python is not installed correctly or is not on PATH.
+
+Step 4 - Create the working folder
+----------------------------------
+
+Run:
+
+    mkdir C:\pdu-radius
+    cd C:\pdu-radius
+
+Copy this script into that folder:
+
+    bootstrap_pdu_radius.py
+
+Step 5 - Create pdus.txt
+------------------------
+
+Yes, you need to create the list of IPs.
+
+The default filename is:
+
+    pdus.txt
+
+It must be in the same folder where you run the script, unless you pass a
+different path with --ips.
+
+Create the file:
+
+    notepad .\pdus.txt
+
+Put one PDU management IP address per line.
+
+Example:
+
+    10.10.5.130
+    10.10.5.131
+    10.10.5.132
+    10.10.5.133
+    10.10.5.134
+
+Save the file and close Notepad.
+
+Blank lines are OK.
+Lines beginning with # are OK.
+Inline comments are OK.
+Duplicate IPs are skipped.
+
+Example with comments:
+
+    # Example PDU list
+    10.10.5.130  # pdu-row3-a12.example.com
+    10.10.5.131  # pdu-row3-a13.example.com
+
+Step 6 - Create radius_config.json
+----------------------------------
+
+Create the config file:
+
+    notepad .\radius_config.json
+
+Example:
+
+    {
+      "radius_servers": [
+        {
+          "server": "10.10.5.10",
+          "auth_port": 1812,
+          "acct_port": 1813,
+          "auth_type": "PAP",
+          "timeout": 2,
+          "retries": 3
+        },
+        {
+          "server": "10.10.5.11",
+          "auth_port": 1812,
+          "acct_port": 1813,
+          "auth_type": "PAP",
+          "timeout": 2,
+          "retries": 3
+        }
+      ],
+      "users": [
+        {
+          "username": "SVC-RADIUS-ADMIN",
+          "full_name": "RADIUS service account (admin)",
+          "role": "Admin"
+        },
+        {
+          "username": "SVC-RADIUS-OPERATOR",
+          "full_name": "RADIUS service account (operator)",
+          "role": "Operator"
+        }
+      ]
+    }
+
+Save the file and close Notepad.
+
+Do not include passwords or shared secrets in this file.
+
+The script supports:
+
+    radius_servers only
+    users only
+    both radius_servers and users
+
+If the config contains both sections, the script manages both sections unless
+you use --skip-radius or --skip-users.
+
+Step 7 - Create a Python virtual environment
+--------------------------------------------
+
+This keeps the Raritan package installed only for this project folder.
+
+Run:
+
+    py -m venv .venv
+
+Then activate it:
+
+    .\.venv\Scripts\Activate.ps1
+
+If PowerShell blocks activation, you may see an execution policy error.
+
+If that happens, run:
+
+    Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+
+Then try again:
+
+    .\.venv\Scripts\Activate.ps1
+
+When the virtual environment is active, your prompt usually starts with:
+
+    (.venv)
+
+Step 8 - Install the Raritan Python package
+-------------------------------------------
+
+With the virtual environment active, run:
+
+    python -m pip install --upgrade pip
+    python -m pip install raritan
+
+Then test the import:
+
+    python -c "import raritan.rpc; print('raritan import OK')"
+
+If you see this, the package import worked:
+
+    raritan import OK
+
+The raritan package is the Xerus JSON-RPC Python binding for Raritan and Server
+Technology devices.
+
+Step 9 - First dry run
+----------------------
+
+Before changing anything, run the script in dry-run mode.
+
+Run:
+
+    python .\bootstrap_pdu_radius.py --ips .\pdus.txt --config .\radius_config.json --dry-run -v
+
+The script will ask for the PDU admin password.
+
+Type the password and press Enter.
+
+The password will not show on screen while you type.
+
+In dry-run mode, the script does not ask for the RADIUS shared secret and does
+not ask for the new local-user password.
+
+That is intentional. Dry-run does not write RADIUS settings and does not create
+users.
+
+Good dry-run output looks like this:
+
+    2026-07-05 10:12:04 INFO Processing 1 PDU(s) [DRY RUN, concurrency=1, verify_cert=False]...
+    2026-07-05 10:12:05 INFO 10.10.5.130: RADIUS - would_set; servers=2
+    2026-07-05 10:12:05 INFO 10.10.5.130: USER SVC-RADIUS-ADMIN - would_create
+    2026-07-05 10:12:05 INFO 10.10.5.130: USER SVC-RADIUS-OPERATOR - would_create
+    2026-07-05 10:12:05 INFO Done. OK=1 Failed=0
+
+If visible RADIUS fields already match, dry-run may show a note like:
+
+    note=visible fields already match; secret cannot be verified and will still be reapplied
+
+That note is normal. It means the server IPs, ports, timeout, retries, and
+auth type appear to match, but the shared secret cannot be read back. A live
+run will still reapply the RADIUS server settings.
+
+The important dry-run results are:
+
+    RADIUS - would_set
+    USER <username> - would_create
+    USER <username> - already_exists
+
+Step 10 - Live run
+------------------
+
+After the dry-run output looks correct, run the live change:
+
+    python .\bootstrap_pdu_radius.py --ips .\pdus.txt --config .\radius_config.json -v --log-file .\pdu-radius.log
+
+The script will ask for:
+
+    PDU admin password
+    RADIUS shared secret
+    Confirm RADIUS shared secret
+    New user account password
+    Confirm new user account password
+
+The passwords and shared secret will not show on screen while you type.
+
+Good live output looks like this:
+
+    2026-07-05 10:20:04 INFO Processing 1 PDU(s) [LIVE, concurrency=1, verify_cert=False]...
+    2026-07-05 10:20:05 INFO 10.10.5.130: RADIUS - set; servers=2
+    2026-07-05 10:20:06 INFO 10.10.5.130: USER SVC-RADIUS-ADMIN - created
+    2026-07-05 10:20:07 INFO 10.10.5.130: USER SVC-RADIUS-OPERATOR - created
+    2026-07-05 10:20:07 INFO Done. OK=1 Failed=0
+
+The important live results are:
+
+    RADIUS - set
+    USER <username> - created
+    USER <username> - already_exists
+
+Step 11 - Confirm with another dry run
+--------------------------------------
+
+After the live run, run dry-run again:
+
+    python .\bootstrap_pdu_radius.py --ips .\pdus.txt --config .\radius_config.json --dry-run -v
+
+Expected user results after a successful live run:
+
+    USER <username> - already_exists
+
+Expected RADIUS result:
+
+    RADIUS - would_set
+
+This may seem odd at first, but it is expected. The RADIUS shared secret cannot
+be verified by reading it back from the API, so the script treats a future live
+run as something that would reapply the RADIUS server settings.
+
+Step 12 - Optional skip modes
+-----------------------------
+
+Only manage users and leave RADIUS server entries alone:
+
+    python .\bootstrap_pdu_radius.py --ips .\pdus.txt --config .\radius_config.json --skip-radius --dry-run -v
+
+Only manage RADIUS server entries and leave users alone:
+
+    python .\bootstrap_pdu_radius.py --ips .\pdus.txt --config .\radius_config.json --skip-users --dry-run -v
+
+This is invalid:
+
+    python .\bootstrap_pdu_radius.py --ips .\pdus.txt --config .\radius_config.json --skip-radius --skip-users
+
+The script rejects it because there is nothing left to do.
+
+Common commands
+---------------
+
+Dry-run with the default pdus.txt and radius_config.json:
+
+    python .\bootstrap_pdu_radius.py --ips .\pdus.txt --config .\radius_config.json --dry-run -v
+
+Live run with a log file:
+
+    python .\bootstrap_pdu_radius.py --ips .\pdus.txt --config .\radius_config.json -v --log-file .\pdu-radius.log
+
+Use a different IP list file:
+
+    python .\bootstrap_pdu_radius.py --ips .\my-pdus.txt --config .\radius_config.json --dry-run -v
+
+Use a different config file:
+
+    python .\bootstrap_pdu_radius.py --ips .\pdus.txt --config .\radius_config.example.json --dry-run -v
+
+Use a different PDU username:
+
+    python .\bootstrap_pdu_radius.py --ips .\pdus.txt --config .\radius_config.json --username admin --dry-run -v
+
+Use a longer timeout:
+
+    python .\bootstrap_pdu_radius.py --ips .\pdus.txt --config .\radius_config.json --dry-run --timeout 30
+
+For first use, keep concurrency at 1.
+
+Use environment variables for secrets
+-------------------------------------
+
+This avoids typing secrets every run.
+
+In PowerShell:
+
+    $env:PDU_ADMIN_PASSWORD = "your-pdu-admin-password"
+    $env:RADIUS_SHARED_SECRET = "your-radius-shared-secret"
+    $env:PDU_RADIUS_USER_PASSWORD = "your-new-local-user-password"
+
+Then run:
+
+    python .\bootstrap_pdu_radius.py --ips .\pdus.txt --config .\radius_config.json --dry-run -v
+
+or:
+
+    python .\bootstrap_pdu_radius.py --ips .\pdus.txt --config .\radius_config.json -v --log-file .\pdu-radius.log
+
+These environment variables only apply to the current PowerShell session.
+
+Close PowerShell when you are done.
+
+Avoid this when screen sharing or recording.
+
+Command-line options
+--------------------
+
+--ips PATH
+
+    IP list file.
+    Default: pdus.txt
+
+--config PATH
+
+    JSON config file.
+    Default: radius_config.json
+
+--username USERNAME
+
+    PDU login username.
+    Default: admin
+
+--password PASSWORD
+
+    PDU admin password.
+    Supported, but not recommended because it can appear in shell history.
+
+--radius-secret SECRET
+
+    RADIUS shared secret.
+    Supported, but not recommended because it can appear in shell history.
+
+--user-password PASSWORD
+
+    Password for every new local user in the config.
+    Supported, but not recommended because it can appear in shell history.
+
+--skip-radius
+
+    Do not touch RADIUS server configuration.
+
+--skip-users
+
+    Do not create any local user accounts.
+
+--timeout SECONDS
+
+    Connection timeout for ordinary API calls, per PDU.
+    Default: 10
+
+--concurrency NUMBER
+
+    Number of PDUs to process in parallel.
+    Default: 1
+
+--dry-run
+
+    Show what would happen but do not write RADIUS settings or create users.
+
+-v or --verbose
+
+    Show debug logging.
+
+--log-file PATH
+
+    Write a log file.
+
+--no-insecure
+
+    Require valid trusted HTTPS certificates.
+
+--insecure
+
+    Disable HTTPS certificate verification.
+    This is already the default because many PDUs use self-signed certificates.
+
+What to do if something fails
+-----------------------------
+
+Problem:
+
+    No IPs found in pdus.txt
+
+Fix:
+
+    Make sure pdus.txt exists in the folder where you are running the script.
+    Make sure it has one IP address per line.
+
+Problem:
+
+    invalid IP address
+
+Fix:
+
+    Check pdus.txt for a typo.
+    The script reports the line number.
+
+Problem:
+
+    no radius_servers defined
+
+Fix:
+
+    Add a radius_servers section to radius_config.json, or use --skip-radius
+    if you only want to manage users.
+
+Problem:
+
+    no users defined
+
+Fix:
+
+    Add a users section to radius_config.json, or use --skip-users if you only
+    want to manage RADIUS servers.
+
+Problem:
+
+    Both --skip-radius and --skip-users were given
+
+Fix:
+
+    Remove one of the skip options. Using both leaves nothing to do.
+
+Problem:
+
+    unknown auth_type
+
+Fix:
+
+    Use one of the supported values:
+
+        PAP
+        CHAP
+        MSCHAPV2
+
+Problem:
+
+    duplicate radius server
+
+Fix:
+
+    Remove the duplicate server from radius_config.json.
+
+Problem:
+
+    duplicate username
+
+Fix:
+
+    Remove the duplicate username from radius_config.json.
+
+Problem:
+
+    RADIUS shared secret and confirmation do not match
+
+Fix:
+
+    Re-run the live command and type the same shared secret both times.
+
+Problem:
+
+    New user account password and confirmation do not match
+
+Fix:
+
+    Re-run the live command and type the same new local-user password both
+    times.
+
+Problem:
+
+    python is not recognized
+    py is not recognized
+
+Fix:
+
+    Python is not installed correctly, or it is not on PATH.
+    Reinstall Python and enable the PATH option if offered.
+
+Problem:
+
+    No module named raritan
+
+Fix:
+
+    The Raritan Python package is not installed in the Python environment you
+    are using. Activate the virtual environment and run:
+
+        python -m pip install raritan
+
+Problem:
+
+    Connection timed out
+    Connection refused
+    No route to host
+
+Fix:
+
+    Check the IP address.
+    Check that the PDU is powered and online.
+    Check that your computer can reach the PDU management network.
+    Check firewall rules for HTTPS/TCP 443.
+
+Problem:
+
+    HTTP Error 401
+    HTTP Error 403
+
+Fix:
+
+    The username or password is wrong, or the account does not have permission.
+    Confirm the credential and try again.
+
+Problem:
+
+    RADIUS - setRadiusServers_failed_ret_<N>
+
+Fix:
+
+    The PDU rejected the RADIUS server settings. Check the config values and
+    confirm this PDU supports the RADIUS settings being sent.
+
+Problem:
+
+    RADIUS - verify_failed
+
+Fix:
+
+    The script wrote RADIUS server settings, but the values read afterward did
+    not match the desired visible fields. Check the PDU directly and review
+    the log.
+
+Problem:
+
+    USER <username> - role_not_found:<role>
+
+Fix:
+
+    The role name in radius_config.json does not exist on the PDU. Fix the
+    role name or create the role separately before rerunning.
+
+Problem:
+
+    USER <username> - password_needs_uppercase
+    USER <username> - password_needs_numeric
+    USER <username> - password_needs_special
+    USER <username> - password_too_short
+
+Fix:
+
+    The new local-user password does not meet the PDU password policy.
+    Choose a stronger password and rerun the script.
+
+Problem:
+
+    USER <username> - verify_failed_not_found_after_create
+
+Fix:
+
+    The create call returned success, but the account did not appear afterward.
+    Check the PDU directly and review the log.
+
+Problem:
+
+    Some PDUs changed and others failed
+
+Fix:
+
+    Review the failed IPs shown at the end.
+    Fix the config, network, credential, or device-side issue for those PDUs.
+    Rerun dry-run on the failed PDUs before attempting live again.
+
+Recommended first production process
+------------------------------------
+
+1. Put one test PDU in pdus.txt.
+
+2. Confirm radius_config.json has the intended RADIUS servers and users.
+
+3. Dry-run:
+
+       python .\bootstrap_pdu_radius.py --ips .\pdus.txt --config .\radius_config.json --dry-run -v
+
+4. If dry-run looks good, run live:
+
+       python .\bootstrap_pdu_radius.py --ips .\pdus.txt --config .\radius_config.json -v --log-file .\pdu-radius.log
+
+5. Dry-run again to confirm the local users now report already_exists.
+
+6. Check the PDU directly if needed.
+
+7. Add the remaining PDU IPs to pdus.txt.
+
+8. Dry-run again.
+
+9. Run live again.
+
+10. Save the log file for your records.
+
+Security reminders
+------------------
+
+Do not paste real passwords or shared secrets into tickets, chat, email, or
+screenshots.
+
+Do not put passwords or shared secrets in radius_config.json.
+
+Do not use --password, --radius-secret, or --user-password unless you have a
+specific reason.
+
+Prefer the interactive prompts or environment variables.
+
+Close PowerShell after using secret environment variables.
+
+Keep pdus.txt limited to the intended PDUs.
+
+Keep radius_config.json limited to the intended RADIUS servers and users.
+
+Remember that this script does not enable RADIUS login by itself. It stages
+RADIUS server entries and supporting local users only.
+
+Review the log file before attaching or sharing it.
+
+Source references
+-----------------
+
+Python for Windows documentation:
+
+    https://docs.python.org/3/using/windows.html
+
+Python downloads:
+
+    https://www.python.org/downloads/
+
+Python install manager release page:
+
+    https://www.python.org/downloads/release/pymanager-262/
+
+Raritan Python package:
+
+    https://pypi.org/project/raritan/
+
+Raritan / Server Technology JSON-RPC API reference:
+
+    https://help.servertech.com/json-rpc/4.0.21/

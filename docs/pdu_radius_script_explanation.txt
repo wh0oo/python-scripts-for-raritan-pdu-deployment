@@ -1,0 +1,619 @@
+Raritan PDU RADIUS Script - What It Does
+========================================
+
+File being documented:
+
+    bootstrap_pdu_radius.py
+
+Purpose
+-------
+
+This script stages Raritan PDU RADIUS authentication configuration across a
+list of PDU management IP addresses.
+
+It can do two related things:
+
+    Configure the PDU's RADIUS server entries.
+    Create local proxy/supporting user accounts with SNMPv3 settings.
+
+The script reads a shared JSON config file that describes the RADIUS servers
+and local users to create. Secrets are not stored in the JSON config file.
+
+Important scope note
+--------------------
+
+This script does not change the active authentication method or login policy.
+
+It does not switch the PDU from local authentication to RADIUS authentication.
+That authentication policy/order setting is intentionally out of scope for this
+script.
+
+This script is intended as a staging step before a later authentication policy
+change. It still makes real changes in live mode, because it can update RADIUS
+server entries and create local user accounts.
+
+Run dry-run first. Test with a small target list before running against a full
+fleet.
+
+What the script changes
+-----------------------
+
+Depending on the config file and command-line options, the script can change:
+
+    RADIUS server entries under the PDU's RADIUS configuration.
+    Local user accounts listed in the config file.
+    SNMPv3 settings for those newly created local users.
+
+For RADIUS server entries, the script applies:
+
+    Server address
+    Authentication port
+    Accounting port
+    Authentication type
+    Timeout
+    Retries
+    Shared secret
+
+For local users, the script creates accounts with:
+
+    Username
+    Full name
+    Role assignment, if provided
+    Enabled account state
+    needPasswordChange=False
+    SNMPv3 enabled
+    SNMPv3 authentication/privacy settings
+
+The same RADIUS shared secret is applied to every RADIUS server listed in the
+config.
+
+The same new local-user password is applied to every user listed in the config.
+
+What the script does NOT change
+-------------------------------
+
+This script does not change the active authentication method.
+It does not change authentication order or login policy.
+It does not turn RADIUS login on by itself.
+It does not disable local login.
+It does not change the admin password.
+It does not update firmware.
+It does not turn outlets on or off.
+It does not reboot the PDU.
+It does not change network settings.
+It does not configure DNS, NTP, syslog, outlet settings, sensors, or power.
+It does not delete users.
+It does not modify existing users listed in the config.
+It does not store secrets in the JSON config file.
+It does not verify that RADIUS logins actually work after a policy switch.
+
+Config file
+-----------
+
+The default config file is:
+
+    radius_config.json
+
+You can choose another config file with:
+
+    --config PATH
+
+Example config:
+
+    {
+      "radius_servers": [
+        {
+          "server": "10.10.5.10",
+          "auth_port": 1812,
+          "acct_port": 1813,
+          "auth_type": "PAP",
+          "timeout": 2,
+          "retries": 3
+        },
+        {
+          "server": "10.10.5.11",
+          "auth_port": 1812,
+          "acct_port": 1813,
+          "auth_type": "PAP",
+          "timeout": 2,
+          "retries": 3
+        }
+      ],
+      "users": [
+        {
+          "username": "SVC-RADIUS-ADMIN",
+          "full_name": "RADIUS service account (admin)",
+          "role": "Admin"
+        },
+        {
+          "username": "SVC-RADIUS-OPERATOR",
+          "full_name": "RADIUS service account (operator)",
+          "role": "Operator"
+        }
+      ]
+    }
+
+The config file should not contain passwords or shared secrets.
+
+radius_servers and users are each optional, but at least one enabled section
+must be present.
+
+If you only want to manage users, use:
+
+    --skip-radius
+
+If you only want to manage RADIUS server entries, use:
+
+    --skip-users
+
+The script rejects duplicate RADIUS server entries and duplicate usernames in
+the config before contacting any PDU.
+
+Secrets
+-------
+
+The script uses three possible secrets:
+
+    PDU admin password
+    RADIUS shared secret
+    New local-user password
+
+The environment variables are:
+
+    PDU_ADMIN_PASSWORD
+    RADIUS_SHARED_SECRET
+    PDU_RADIUS_USER_PASSWORD
+
+The command-line options are:
+
+    --password
+    --radius-secret
+    --user-password
+
+Passing secrets on the command line is supported, but not recommended, because
+command-line arguments can be visible in shell history and process listings.
+
+The safer normal methods are:
+
+    Type secrets at the interactive prompt.
+    Use environment variables for the current PowerShell session.
+
+Interactive live-mode secret behavior
+-------------------------------------
+
+In live mode, if the RADIUS shared secret is not provided by environment
+variable or command-line option, the script prompts for it and asks for
+confirmation.
+
+In live mode, if the new local-user password is not provided by environment
+variable or command-line option, the script prompts for it and asks for
+confirmation.
+
+This helps catch typos before writing values that may not be readable back
+from the PDU afterward.
+
+Dry-run secret behavior
+-----------------------
+
+Dry-run still needs the PDU admin password, because it logs in and reads the
+current PDU state.
+
+Dry-run does not need the RADIUS shared secret.
+Dry-run does not need the new local-user password.
+
+In dry-run mode, the script uses placeholder values for those write-only
+secrets and does not prompt for them.
+
+High-level flow
+---------------
+
+For each PDU IP address, the script does this:
+
+1. Read the IP list from pdus.txt, or from the file provided with --ips.
+
+2. Read and validate the JSON config file.
+
+3. Reject invalid config before contacting any PDU.
+
+   Examples:
+
+       Missing radius_servers when --skip-radius was not used
+       Missing users when --skip-users was not used
+       Both --skip-radius and --skip-users were used
+       Unknown RADIUS auth_type
+       Duplicate RADIUS server entry
+       Duplicate username
+
+4. Prompt for the PDU admin password, unless it was supplied by environment
+   variable or command-line option.
+
+5. In live mode, prompt for RADIUS shared secret and/or new local-user
+   password if needed.
+
+6. Log in to each PDU using the selected username. The default username is
+   admin.
+
+7. If RADIUS servers are enabled for this run, read the current RADIUS server
+   entries.
+
+8. In dry-run mode, report what would happen.
+
+9. In live mode, write the RADIUS server list from the config file.
+
+10. Read RADIUS server entries again and verify the visible fields.
+
+11. If local users are enabled for this run, read the existing account names.
+
+12. If configured users reference roles, read the available roles and resolve
+    role names to role IDs.
+
+13. For each configured user:
+
+       If the account already exists, report already_exists.
+       If the account does not exist and this is dry-run, report would_create.
+       If the account does not exist and this is live mode, create it.
+
+14. After creating a user, read account names again and verify that the new
+    username exists.
+
+15. Report RADIUS and user results for each PDU.
+
+16. Report a final OK/Failed summary and list failed IPs, if any.
+
+RADIUS shared secret and idempotency
+------------------------------------
+
+The RADIUS shared secret cannot be reliably read back from the API.
+
+Because of that, the script cannot prove that the secret already stored on the
+PDU matches the desired secret.
+
+For that reason, in live mode the script always calls setRadiusServers() when
+RADIUS servers are enabled for the run. It does this even if the visible fields
+already match.
+
+This avoids a dangerous false success case where:
+
+    Server IPs match.
+    Ports match.
+    Auth type matches.
+    Timeout/retries match.
+    But the shared secret is wrong or stale.
+
+In dry-run mode, the script can report that visible fields already match, but
+it still notes that the secret cannot be verified and will be reapplied during
+a live run.
+
+Local user behavior
+-------------------
+
+The script creates configured local users if they do not already exist.
+
+If a user already exists, the script reports:
+
+    USER <username> - already_exists
+
+It does not modify existing users.
+
+If a user does not exist, dry-run reports:
+
+    USER <username> - would_create
+
+In live mode, the script creates the user and then verifies that the account
+name appears afterward:
+
+    USER <username> - created
+
+If the requested role does not exist on the PDU, the script reports an error:
+
+    USER <username> - role_not_found:<role>
+
+The script resolves roles before reporting would_create in dry-run mode, so a
+bad role name should be caught before live mode.
+
+SNMPv3 behavior for created users
+---------------------------------
+
+When creating local users, the script enables SNMPv3 settings.
+
+The SNMPv3 defaults are intentionally kept in the script rather than exposed
+as command-line options.
+
+The current defaults are:
+
+    Security level: AUTH_PRIV
+    Authentication protocol: SHA1
+    Privacy protocol: AES128
+    Authentication passphrase: same as user password
+    Privacy passphrase: same as authentication passphrase
+
+This matches the manual-style workflow where SNMPv3 passphrases cascade from
+the account password.
+
+Input file
+----------
+
+The default IP list file is:
+
+    pdus.txt
+
+The script expects one PDU IP address per line.
+
+Blank lines are ignored.
+Lines that start with # are ignored.
+Inline comments are allowed after #.
+Duplicate IP addresses are skipped.
+Invalid IP addresses fail loudly with the line number.
+
+Example pdus.txt:
+
+    # Example PDU list
+    10.10.5.130
+    10.10.5.131
+    10.10.5.132
+
+Example with inline comments:
+
+    10.10.5.130  # row 3, rack A12
+    10.10.5.131  # row 3, rack A13
+
+Modes
+-----
+
+The script has two practical modes:
+
+    Dry-run mode    Show what would happen, but do not write RADIUS config
+                    and do not create users.
+
+    Live mode       Write RADIUS server entries and/or create missing local
+                    users.
+
+Dry-run mode is enabled with:
+
+    --dry-run
+
+There is no separate --check option for this script.
+
+Skip options
+------------
+
+Use this if you only want to manage users and leave RADIUS server entries
+alone:
+
+    --skip-radius
+
+Use this if you only want to manage RADIUS server entries and leave users
+alone:
+
+    --skip-users
+
+The script rejects this combination:
+
+    --skip-radius --skip-users
+
+because that leaves nothing to do.
+
+Concurrency
+-----------
+
+The script can process multiple PDUs in parallel.
+
+The option is:
+
+    --concurrency NUMBER
+
+The default is:
+
+    1
+
+For first use, leave it at 1.
+
+The script blocks invalid values like 0 or negative numbers.
+
+TLS certificate behavior
+------------------------
+
+By default, the script does not verify the PDU HTTPS certificate.
+
+That is intentional.
+
+Default behavior:
+
+    TLS certificate verification is disabled.
+
+If you have valid trusted certificates on the PDUs and want strict checking,
+run with:
+
+    --no-insecure
+
+Logging
+-------
+
+By default, the script prints progress to the console.
+
+You can also write a log file with:
+
+    --log-file pdu-radius.log
+
+You can enable debug logging with:
+
+    -v
+
+or:
+
+    --verbose
+
+Example:
+
+    python .\bootstrap_pdu_radius.py --ips .\pdus.txt --config .\radius_config.json --dry-run -v
+
+Exit codes
+----------
+
+The script exits with these codes:
+
+    0     All PDUs processed successfully
+    1     Local setup/input problem, such as invalid IP syntax, no IPs,
+          invalid config, both skip flags being used, invalid concurrency,
+          or interactive secret confirmation mismatch
+    2     One or more PDUs failed
+    130   The script was interrupted with Ctrl+C
+
+Common results
+--------------
+
+RADIUS - would_set
+
+    Dry-run mode. The script would write the configured RADIUS server entries
+    during a live run.
+
+RADIUS - set
+
+    Live mode. The script wrote the configured RADIUS server entries and
+    verified the visible fields afterward.
+
+RADIUS - setRadiusServers_failed_ret_<N>
+
+    The PDU rejected the RADIUS server settings. The value <N> is the return
+    code from the API.
+
+RADIUS - verify_failed
+
+    The script wrote RADIUS server settings, but reading them afterward did
+    not match the desired visible fields.
+
+USER <username> - already_exists
+
+    The account already exists. The script did not modify it.
+
+USER <username> - would_create
+
+    Dry-run mode. The account does not exist and would be created during a
+    live run.
+
+USER <username> - created
+
+    Live mode. The account was created and verified afterward.
+
+USER <username> - role_not_found:<role>
+
+    The config requested a role name that was not found on the PDU.
+
+USER <username> - user_already_exists
+
+    The create call reported that the user already exists. This should be
+    uncommon because the script checks existing names before creating.
+
+USER <username> - password_too_short
+
+    The new local-user password does not satisfy the PDU password policy.
+
+USER <username> - password_needs_lowercase
+
+    The new local-user password needs a lowercase letter.
+
+USER <username> - password_needs_uppercase
+
+    The new local-user password needs an uppercase letter.
+
+USER <username> - password_needs_numeric
+
+    The new local-user password needs a numeric character.
+
+USER <username> - password_needs_special
+
+    The new local-user password needs a special character.
+
+USER <username> - verify_failed_not_found_after_create
+
+    The create call returned success, but the username was not found when the
+    account list was read afterward.
+
+Important implementation notes
+------------------------------
+
+The script uses the Raritan Python package and the Xerus JSON-RPC API.
+
+For login verification, it uses a small authenticated user API call:
+
+    usermgmt.User(...).getInfo()
+
+It intentionally does not use:
+
+    pdumodel.Pdu(...).getMetaData()
+
+because that call can fail on some tested PDU/API/library combinations while
+decoding unrelated fields.
+
+The script uses these Raritan resource IDs:
+
+    /auth/radius            RADIUS manager
+    /auth/role              Role manager
+    /auth/user              User manager
+    /auth/user/<username>   User login check
+
+Important assumptions
+---------------------
+
+The script assumes:
+
+    The PDU is reachable over HTTPS.
+    The PDU supports the Raritan/Xerus JSON-RPC API.
+    The Python raritan package is installed.
+    The account can authenticate to the PDU.
+    The account has permission to configure RADIUS server entries.
+    The account has permission to create local users.
+    The role names in the config exist on the PDU.
+    The IP list file exists and contains the correct PDU management IPs.
+    The JSON config file describes the intended RADIUS servers and local users.
+    RADIUS server secrets are intentionally supplied outside the JSON config.
+
+Safety notes
+------------
+
+Run --dry-run first.
+
+Use --concurrency 1 the first time.
+
+Keep the IP list small and controlled for the first live run.
+
+Use one test PDU first.
+
+Remember that this script makes real changes in live mode.
+
+This script does not enable RADIUS login by itself. It stages server entries
+and local accounts only.
+
+Do not put real passwords or shared secrets in the JSON config file.
+
+Do not paste real passwords or shared secrets into tickets, chat, email, or
+screenshots.
+
+Prefer the interactive prompt or environment variables instead of passing
+secrets on the command line.
+
+Close PowerShell after using environment variables for secrets.
+
+Save a log file for audit records.
+
+Review the log file before attaching or sharing it. Logs should not include
+passwords or shared secrets, but they may include device IPs, usernames,
+RADIUS server IPs, and other infrastructure-identifying details.
+
+Suggested first test
+--------------------
+
+Use one PDU in pdus.txt first.
+
+Dry-run:
+
+    python .\bootstrap_pdu_radius.py --ips .\pdus.txt --config .\radius_config.json --dry-run -v
+
+If dry-run looks correct, run live:
+
+    python .\bootstrap_pdu_radius.py --ips .\pdus.txt --config .\radius_config.json -v --log-file .\pdu-radius.log
+
+Then dry-run again to confirm the staged state.
+
+After that works on one PDU, add the remaining PDUs to pdus.txt and repeat
+the dry-run and live process.
