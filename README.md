@@ -11,6 +11,7 @@ These scripts are designed for bootstrapping and maintaining groups of PDUs from
 | [`bootstrap_pdu_passwords.py`](./bootstrap_pdu_passwords.py) | Bulk-changes the Raritan PDU `admin` password across a list of devices. | [README](./docs/bootstrap_pdu_passwords.md) / [What it does](./docs/pdu_password_script_explanation.txt) / [How to use](./docs/pdu_password_script_how_to_use.txt) |
 | [`bootstrap_pdu_names_from_dns.py`](./bootstrap_pdu_names_from_dns.py) | Sets each PDU's user-defined name from reverse DNS. | [README](./docs/bootstrap_pdu_names_from_dns.md) / [What it does](./docs/pdu_names_from_dns_script_explanation.txt) / [How to use](./docs/pdu_names_from_dns_script_how_to_use.txt) |
 | [`bootstrap_pdu_firmware.py`](./bootstrap_pdu_firmware.py) | Checks installed firmware versions or uploads and installs a firmware image across a list of devices. | [README](./docs/bootstrap_pdu_firmware.md) / [What it does](./docs/pdu_firmware_script_explanation.txt) / [How to use](./docs/pdu_firmware_script_how_to_use.txt) |
+| [`bootstrap_pdu_radius.py`](./bootstrap_pdu_radius.py) | Stages RADIUS server entries and supporting local user accounts across a list of devices. | [README](./docs/bootstrap_pdu_radius.md) / [What it does](./docs/pdu_radius_script_explanation.txt) / [How to use](./docs/pdu_radius_script_how_to_use.txt) |
 
 ## Requirements
 
@@ -44,10 +45,10 @@ Blank lines and comments are ignored. Some scripts also support inline comments:
 
 ## Common behavior
 
-Most scripts support:
+Scripts support:
 
 - `--ips pdus.txt` to choose the target list
-- `--dry-run` to preview behavior without making changes
+- `--dry-run` to preview behavior without making changes, where applicable
 - `--concurrency 1` by default for safe sequential processing
 - `--insecure` by default because many PDUs use self-signed TLS certificates
 - `--no-insecure` to require valid TLS certificates
@@ -81,6 +82,12 @@ Preview a firmware update:
 
 ```bash
 python bootstrap_pdu_firmware.py --ips pdus.txt --update --image pdu-firmware.bin --dry-run -v
+```
+
+Preview RADIUS server and local user staging:
+
+```bash
+python bootstrap_pdu_radius.py --ips pdus.txt --config radius_config.json --dry-run -v
 ```
 
 ## Script notes
@@ -122,6 +129,22 @@ Firmware updates are intentionally conservative:
 - Downgrades are not automated.
 - Update progress is polled and logged until success, failure, or timeout.
 
+### `bootstrap_pdu_radius.py`
+
+Stages RADIUS server entries and supporting local user accounts.
+
+This script is intended as a staging step before a later authentication-policy change. It does not change the active authentication method, does not change authentication order, and does not switch the PDU from local login to RADIUS login.
+
+The script reads RADIUS server and user definitions from a JSON config file. Secrets are not stored in the config file. The PDU admin password, RADIUS shared secret, and new local-user password can be supplied by environment variables or typed interactively.
+
+RADIUS staging is intentionally conservative:
+
+- Dry-run logs in and reads current state, but does not ask for the RADIUS shared secret or new local-user password.
+- Live mode asks for confirmation when the RADIUS shared secret or new local-user password is typed interactively.
+- The RADIUS shared secret cannot be verified by reading it back from the API, so live mode reapplies RADIUS server settings whenever RADIUS servers are enabled.
+- Existing local users are reported as `already_exists` and are not modified.
+- New local users are verified after creation by reading the account list again.
+
 ## Exit codes
 
 | Code | Meaning |
@@ -134,7 +157,8 @@ Firmware updates are intentionally conservative:
 ## Security notes
 
 - Prefer environment variables or interactive password prompts over command-line password arguments.
-- Be careful with logs. Device names, IPs, and DNS names may identify internal infrastructure.
+- Do not put passwords or shared secrets in JSON config files.
+- Be careful with logs. Device names, IPs, DNS names, usernames, and RADIUS server addresses may identify internal infrastructure.
 - TLS verification is disabled by default for compatibility with self-signed PDU certificates. Use `--no-insecure` when your PDUs have trusted certificates.
 - Always run with `--dry-run` first against a new or unfamiliar group of PDUs.
 
