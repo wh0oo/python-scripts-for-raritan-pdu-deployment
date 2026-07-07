@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""
+"""
 Configure Raritan PX-series PDU timezone and display units across a list of
 PDU management IP addresses.
 
