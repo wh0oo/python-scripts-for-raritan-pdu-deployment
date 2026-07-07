@@ -6,8 +6,8 @@ PDU management IP addresses.
 Default behavior:
     * Set device timezone to America/Chicago, which is Central Time with DST
       handled by the timezone database when the PDU supports DST info.
-    * Set default display preferences to Fahrenheit and feet.
-    * Set every existing local user's display preferences to Fahrenheit and feet.
+    * Set default display preferences to Fahrenheit, feet, and PSI.
+    * Set every existing local user's display preferences to Fahrenheit, feet, and PSI.
 
 This script does not change power state, outlets, thresholds, network settings,
 RADIUS settings, or passwords.
@@ -64,6 +64,7 @@ def enum_value(enum_class_name, member_name):
 
 TEMP_F = enum_value("TemperatureEnum", "DEG_F")
 LENGTH_FEET = enum_value("LengthEnum", "FEET")
+PRESSURE_PSI = enum_value("PressureEnum", "PSI")
 
 
 def enum_text(value):
@@ -127,6 +128,44 @@ def test_login(ip, username, password, timeout, verify_cert):
     return agent
 
 
+def raw_get_datetime_cfg(agent):
+    """Read /datetime Cfg as a plain dict via a raw JSON-RPC call, bypassing
+    the typed DateTime.Cfg.decode()/NtpCfg.decode() path entirely.
+
+    Known library bug (raritan 4.4.0.52884): NtpCfg.decode()'s per-field
+    ternaries are written as `json[k] if k in json or not useDefaults else
+    default`. The public Method.__call__ chain always invokes decode() with
+    useDefaults=False (there is no way to pass useDefaults=True through
+    datetime_proxy.getCfg()), and `not useDefaults` is then always True, so
+    the ternary always evaluates to `json[k]` regardless of whether k is
+    actually present. On PDUs whose ntpCfg response omits
+    'server1AuthKeyId' (and by the same pattern, potentially
+    'server2AuthKeyId'), this raises a bare KeyError, e.g. `'server1AuthKeyId'`.
+
+    Since getCfg() decodes the *entire* Cfg struct (zoneCfg, protocol,
+    deviceTime, ntpCfg) in one call, this crashes any script that touches
+    /datetime at all on affected devices, even ones that only care about
+    zoneCfg. Reading/writing the raw dict directly avoids invoking the
+    broken decode() path, the same way the PDU-naming script bypasses
+    pdumodel.Pdu.Settings.decode() for the inletWiring bug.
+    """
+    return agent.json_rpc(_DATETIME_TARGET, "getCfg", {})["cfg"]
+
+
+def raw_set_datetime_cfg(agent, raw_cfg):
+    """Write a raw /datetime Cfg dict back via a raw JSON-RPC call.
+
+    raw_cfg should be a dict previously obtained from raw_get_datetime_cfg(),
+    with only the specific fields the caller intends to change mutated in
+    place. Untouched sub-objects (protocol, deviceTime, ntpCfg) are sent back
+    exactly as the device provided them, so this never needs to construct a
+    typed NtpCfg/Cfg object and can't trip the decode bug above.
+
+    Returns the integer status code (0 = OK, 1 = invalid configuration).
+    """
+    return agent.json_rpc(_DATETIME_TARGET, "setCfg", {"cfg": raw_cfg})["_ret_"]
+
+
 def timezone_search_terms(timezone_name):
     requested = timezone_name.strip()
     lowered = requested.lower()
@@ -186,15 +225,23 @@ def zone_summary(zone):
 
 
 def configure_timezone(agent, timezone_name, enable_auto_dst, dry_run):
+    # NOTE: getZoneInfos() is unaffected by the NtpCfg decode bug (it decodes
+    # a list of ZoneInfo, not Cfg/NtpCfg), so the typed proxy is fine here.
     datetime_proxy = rpc_datetime.DateTime(_DATETIME_TARGET, agent)
-    cfg = datetime_proxy.getCfg()
     desired_zone, used_olson = find_timezone(datetime_proxy, timezone_name)
 
+    # Read/write the raw Cfg dict directly -- see raw_get_datetime_cfg()'s
+    # docstring. datetime_proxy.getCfg()/setCfg() would decode the full Cfg
+    # struct including ntpCfg and can KeyError on devices whose ntpCfg
+    # response omits 'server1AuthKeyId', even though this function only
+    # cares about zoneCfg.
+    raw_cfg = raw_get_datetime_cfg(agent)
+    zone_cfg = raw_cfg["zoneCfg"]
+
     desired_dst = bool(enable_auto_dst and getattr(desired_zone, "hasDSTInfo", False))
-    current_zone_cfg = cfg.zoneCfg
-    current_id = getattr(current_zone_cfg, "id", None)
-    current_name = getattr(current_zone_cfg, "name", "")
-    current_dst = getattr(current_zone_cfg, "enableAutoDST", None)
+    current_id = zone_cfg.get("id")
+    current_name = zone_cfg.get("name", "")
+    current_dst = zone_cfg.get("enableAutoDST")
 
     current = f"id={current_id}, name={current_name}, autoDST={current_dst}"
     desired = f"{zone_summary(desired_zone)}, autoDST={desired_dst}"
@@ -219,11 +266,11 @@ def configure_timezone(agent, timezone_name, enable_auto_dst, dry_run):
             "used_olson": used_olson,
         }
 
-    cfg.zoneCfg.id = desired_zone.id
-    cfg.zoneCfg.name = desired_zone.name
-    cfg.zoneCfg.enableAutoDST = desired_dst
+    zone_cfg["id"] = desired_zone.id
+    zone_cfg["name"] = desired_zone.name
+    zone_cfg["enableAutoDST"] = desired_dst
 
-    ret = datetime_proxy.setCfg(cfg)
+    ret = raw_set_datetime_cfg(agent, raw_cfg)
     if ret != 0:
         return {
             "result": f"setCfg_failed_ret_{ret}",
@@ -232,11 +279,11 @@ def configure_timezone(agent, timezone_name, enable_auto_dst, dry_run):
             "used_olson": used_olson,
         }
 
-    cfg_after = datetime_proxy.getCfg()
-    after = cfg_after.zoneCfg
-    after_id = getattr(after, "id", None)
-    after_name = getattr(after, "name", "")
-    after_dst = getattr(after, "enableAutoDST", None)
+    raw_cfg_after = raw_get_datetime_cfg(agent)
+    after = raw_cfg_after["zoneCfg"]
+    after_id = after.get("id")
+    after_name = after.get("name", "")
+    after_dst = after.get("enableAutoDST")
 
     id_verified = desired_zone.id != 0 and after_id == desired_zone.id
     name_verified = desired_zone.id == 0 and str(after_name).lower() == str(desired_zone.name).lower()
@@ -260,15 +307,18 @@ def configure_timezone(agent, timezone_name, enable_auto_dst, dry_run):
 
 
 def preferences_match(prefs):
-    return prefs.temperatureUnit == TEMP_F and prefs.lengthUnit == LENGTH_FEET
+    return (
+        prefs.temperatureUnit == TEMP_F
+        and prefs.lengthUnit == LENGTH_FEET
+        and prefs.pressureUnit == PRESSURE_PSI
+    )
 
 
 def desired_preferences_from(prefs):
     desired = copy.deepcopy(prefs)
     desired.temperatureUnit = TEMP_F
     desired.lengthUnit = LENGTH_FEET
-    # Leave pressureUnit unchanged because the requested change was only
-    # temperature to Fahrenheit and distance/length to feet.
+    desired.pressureUnit = PRESSURE_PSI
     return desired
 
 
@@ -331,7 +381,7 @@ def configure_user_preferences(agent, username, dry_run):
                 "username": username,
                 "result": "skipped_not_modifyable",
                 "current": "capability canSetPreferences=False",
-                "desired": f"temp={enum_text(TEMP_F)}, length={enum_text(LENGTH_FEET)}",
+                "desired": f"temp={enum_text(TEMP_F)}, length={enum_text(LENGTH_FEET)}, pressure={enum_text(PRESSURE_PSI)}",
             }
     except Exception as e:
         log.debug("%s: could not read capabilities for user %s: %s", _USER_MANAGER_TARGET, username, e)
@@ -490,7 +540,7 @@ def log_result(result):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Configure Raritan PDU timezone plus Fahrenheit/feet display preferences."
+        description="Configure Raritan PDU timezone plus Fahrenheit/feet/PSI display preferences."
     )
     parser.add_argument("--ips", default="pdus.txt", help="File with one PDU IP per line. Default: pdus.txt")
     parser.add_argument("--username", default="admin", help="PDU login username. Default: admin")
@@ -521,13 +571,13 @@ def parse_args():
         "--apply-users",
         dest="apply_users",
         action="store_true",
-        help="Apply Fahrenheit/feet preferences to every existing local user. Default behavior.",
+        help="Apply Fahrenheit/feet/PSI preferences to every existing local user. Default behavior.",
     )
     parser.add_argument(
         "--no-apply-users",
         dest="apply_users",
         action="store_false",
-        help="Only set default preferences; do not update existing users.",
+        help="Only set default Fahrenheit/feet/PSI preferences; do not update existing users.",
     )
     parser.add_argument(
         "--list-timezones",
@@ -614,7 +664,7 @@ def main():
 
     mode = "DRY RUN" if args.dry_run else "LIVE"
     log.info(
-        "Processing %d PDU(s) [%s, timezone=%s, units=Fahrenheit/feet, apply_users=%s, concurrency=%d, verify_cert=%s]...",
+        "Processing %d PDU(s) [%s, timezone=%s, units=Fahrenheit/feet/PSI, apply_users=%s, concurrency=%d, verify_cert=%s]...",
         len(ips),
         mode,
         args.timezone,
