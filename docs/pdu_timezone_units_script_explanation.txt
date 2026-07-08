@@ -1,0 +1,466 @@
+Raritan PDU Timezone and Units Script - What It Does
+====================================================
+
+File being documented:
+
+    bootstrap_pdu_timezone_units.py
+
+Purpose
+-------
+
+This script configures the timezone and display units on Raritan PX-series
+PDUs.
+
+It reads a list of PDU management IP addresses, logs in to each PDU, and
+configures:
+
+    Device timezone:      America/Chicago by default
+    Temperature unit:     Fahrenheit
+    Length/distance unit: feet
+    Pressure unit:        PSI
+
+The script also updates the default display preferences and, by default, every
+existing local user's display preferences.
+
+This is intended to replace the manual step of logging in to each PDU and
+setting the same timezone and unit preferences through the web interface.
+
+What the script changes
+-----------------------
+
+The script changes these settings:
+
+    The PDU timezone setting
+    The PDU default display preferences
+    Existing local users' display preferences, unless --no-apply-users is used
+
+The default target timezone is:
+
+    America/Chicago
+
+That is Central Time with daylight saving time handled by the timezone data
+when the selected PDU timezone entry supports DST information.
+
+The target display units are:
+
+    Temperature: Fahrenheit
+    Length:      feet
+    Pressure:    PSI
+
+What the script does NOT change
+-------------------------------
+
+This script does not change outlet power.
+It does not turn outlets on or off.
+It does not reboot the PDU.
+It does not update firmware.
+It does not change network settings.
+It does not change passwords.
+It does not create accounts.
+It does not delete accounts.
+It does not change roles.
+It does not configure RADIUS.
+It does not configure SNMP.
+It does not change NTP server addresses or authentication settings.
+It does not change DNS settings.
+It does not change thresholds.
+
+Important implementation note
+-----------------------------
+
+The script intentionally uses raw JSON-RPC calls for the /datetime getCfg and
+setCfg operations.
+
+The Raritan Python binding can fail while decoding the full typed DateTime Cfg
+object if the PDU response omits optional NTP-related fields such as:
+
+    server1AuthKeyId
+    server2AuthKeyId
+
+The timezone change only needs the zoneCfg part of the DateTime configuration.
+To avoid the typed decode problem, the script reads the raw DateTime config as
+a plain dictionary, changes only zoneCfg, and writes the config back with the
+other DateTime sub-objects preserved as returned by the PDU.
+
+This is similar in spirit to the PDU naming script, which uses raw JSON-RPC for
+only the settings field it needs when the typed binding has trouble decoding
+unrelated fields.
+
+High-level flow
+---------------
+
+For each PDU IP address, the script does this:
+
+1. Log in using the supplied admin username and password.
+
+   The default username is:
+
+       admin
+
+   The password is read from one of these places:
+
+       --password
+       PDU_ADMIN_PASSWORD
+       interactive password prompt
+
+2. Read the supported timezone list from the PDU.
+
+   The script searches display/id-based timezone entries first, then
+   Olson/IANA-style entries as a fallback.
+
+3. Find the requested timezone.
+
+   By default, the requested timezone is:
+
+       America/Chicago
+
+   These aliases are also accepted:
+
+       CST
+       CDT
+       Central
+       Central Time
+       US/Central
+
+4. Read the current DateTime config using raw JSON-RPC.
+
+   The script only changes the zoneCfg portion used for timezone and automatic
+   DST behavior.
+
+5. Compare the current timezone to the desired timezone.
+
+   If the PDU is already configured correctly, the script reports:
+
+       TIMEZONE - already_configured
+
+   In dry-run mode, if a change would be made, it reports:
+
+       TIMEZONE - would_set
+
+   In live mode, if the change succeeds and verifies, it reports:
+
+       TIMEZONE - set
+
+6. Read and update the default display preferences.
+
+   The default preferences are changed to:
+
+       temp=DEG_F
+       length=FEET
+       pressure=PSI
+
+   In dry-run mode, the script reports what would change but does not write.
+
+7. Unless --no-apply-users is used, get every local account name and update
+   each user's display preferences.
+
+   The script reads each user's current preference object, changes only the
+   temperature, length, and pressure unit fields, and preserves the rest of the
+   preference object.
+
+8. Verify live changes.
+
+   Timezone changes are verified by reading the raw DateTime config again.
+   Default preferences are verified by reading default preferences again.
+   Per-user preferences are verified by reading that user's preferences again.
+
+9. Report per-PDU results and continue.
+
+   A failure on one PDU is reported for that IP address. The script continues
+   processing the rest of the list.
+
+Input file
+----------
+
+The default IP list file is:
+
+    pdus.txt
+
+The script expects one PDU management IP address per line.
+
+Example pdus.txt:
+
+    10.10.5.10
+    10.10.5.11
+    10.10.5.12
+    10.10.5.13
+    10.10.5.14
+
+Blank lines are ignored.
+Lines that start with # are ignored.
+Inline comments after # are allowed.
+Duplicate IP addresses are skipped.
+Invalid IP addresses fail loudly with the line number.
+
+Example with comments:
+
+    # Raritan PDUs for a test row
+    10.10.5.10
+    10.10.5.11  # left-side PDU
+
+    # Spare / test unit
+    10.10.5.12
+
+Passwords
+---------
+
+The script needs the PDU admin password.
+
+The password can be provided three ways:
+
+1. By typing it when prompted
+2. By setting the environment variable PDU_ADMIN_PASSWORD
+3. By using --password on the command line
+
+The safest normal method is to type it when prompted.
+
+Passing a password on the command line is supported, but it is less safe
+because command-line arguments can be visible in shell history and process
+listings.
+
+The script does not print the password while you type it.
+
+Dry-run mode
+------------
+
+Dry-run mode logs in, reads current state, and reports what would change.
+It does not write timezone settings.
+It does not write default display preferences.
+It does not write per-user display preferences.
+
+Run dry-run mode with:
+
+    --dry-run
+
+Dry-run mode is the recommended first test.
+
+List-timezones mode
+-------------------
+
+The script can print the timezone entries supported by the first PDU in the IP
+list.
+
+Run:
+
+    python .\bootstrap_pdu_timezone_units.py --ips .\pdus.txt --list-timezones
+
+This logs in to the first PDU in pdus.txt, prints supported Olson/IANA zones
+and supported display timezone entries, and exits without making changes.
+
+This is useful if the default America/Chicago lookup does not match the
+labels exposed by a particular PDU firmware version.
+
+Applying settings to users
+--------------------------
+
+By default, the script updates every existing local user's display preferences.
+
+Default behavior:
+
+    apply_users=True
+
+That means the script sets Fahrenheit, feet, and PSI for:
+
+    The default display preferences
+    Every existing local user account returned by getAccountNames()
+
+To set only the default preferences and skip existing users, use:
+
+    --no-apply-users
+
+This does not delete or create users. It only controls whether existing users'
+display preference units are updated.
+
+Automatic DST behavior
+----------------------
+
+By default, the script enables automatic DST adjustment when the selected PDU
+timezone entry reports that it has DST information.
+
+To avoid enabling automatic DST, use:
+
+    --no-auto-dst
+
+This is normally not needed for America/Chicago.
+
+Concurrency
+-----------
+
+The script can process multiple PDUs in parallel.
+
+The option is:
+
+    --concurrency NUMBER
+
+The default is:
+
+    1
+
+For first use, leave it at 1.
+
+After testing, using a higher value such as 4 is reasonable for a small batch.
+
+The script blocks invalid values like 0 or negative numbers.
+
+TLS certificate behavior
+------------------------
+
+By default, the script does not verify the PDU HTTPS certificate.
+
+That is intentional.
+
+Default behavior:
+
+    TLS certificate verification is disabled.
+
+If you have valid trusted certificates on the PDUs and want strict checking,
+run with:
+
+    --no-insecure
+
+Logging
+-------
+
+By default, the script prints progress to the console.
+
+You can also write a log file with:
+
+    --log-file pdu-timezone-units.log
+
+You can enable debug logging with:
+
+    -v
+
+or:
+
+    --verbose
+
+Example:
+
+    python .\bootstrap_pdu_timezone_units.py --ips .\pdus.txt --dry-run -v
+
+Exit codes
+----------
+
+The script exits with these codes:
+
+    0     All PDUs processed successfully
+    1     Local setup/input problem, such as no IPs, invalid IP format,
+          invalid timeout, or invalid concurrency
+    2     One or more PDUs failed
+    130   The script was interrupted with Ctrl+C
+
+Common results
+--------------
+
+TIMEZONE - already_configured
+
+    The PDU timezone already matches the desired timezone and automatic DST
+    setting.
+
+TIMEZONE - would_set
+
+    Dry-run found that the timezone would be changed during a live run.
+
+TIMEZONE - set
+
+    The timezone was changed and verified.
+
+TIMEZONE - setCfg_failed_ret_1
+
+    The PDU rejected the DateTime configuration.
+
+TIMEZONE - verify_failed
+
+    The script wrote the timezone setting, but the read-back verification did
+    not match the desired value.
+
+DEFAULT PREFS - already_configured
+
+    The default display preferences already use Fahrenheit, feet, and PSI.
+
+DEFAULT PREFS - would_set
+
+    Dry-run found that the default display preferences would be changed during
+    a live run.
+
+DEFAULT PREFS - set
+
+    The default display preferences were changed and verified.
+
+USER <username> PREFS - already_configured
+
+    That user's display preferences already use Fahrenheit, feet, and PSI.
+
+USER <username> PREFS - would_set
+
+    Dry-run found that the user's display preferences would be changed during
+    a live run.
+
+USER <username> PREFS - set
+
+    The user's display preferences were changed and verified.
+
+USER <username> PREFS - skipped_not_modifyable
+
+    The PDU reported that the user's preferences cannot be modified.
+
+ERROR - HTTP Error 401 or 403
+
+    The username or password is probably wrong, or the account does not have
+    permission to log in through the API.
+
+ERROR - connection timeout / connection refused / DNS failure
+
+    The script could not reach the PDU at that IP address.
+
+ERROR - timezone not found
+
+    The requested timezone was not found in the PDU's supported timezone list.
+    Run --list-timezones against one PDU to see supported names.
+
+Important assumptions
+---------------------
+
+The script assumes:
+
+    The PDU is reachable over HTTPS.
+    The PDU supports the Raritan/Xerus JSON-RPC API.
+    The Python raritan package is installed.
+    The admin account has permission to change DateTime settings.
+    The admin account has permission to change default preferences.
+    The admin account has permission to change user preferences if users are
+    being updated.
+    The IP list file exists and contains the correct PDU management IPs.
+
+Safety notes
+------------
+
+Run dry-run first.
+
+Use --concurrency 1 the first time.
+
+Keep the IP list small and controlled for the first test.
+
+Do not put production passwords in shared notes, tickets, screenshots, or chat.
+
+Prefer the interactive password prompt instead of passing passwords on the
+command line.
+
+Save a log file for audit records, but remember that logs may contain PDU IPs,
+usernames, current unit settings, desired unit settings, and timezone labels.
+
+Suggested first test
+--------------------
+
+Use one PDU in pdus.txt first.
+
+Then run:
+
+    python .\bootstrap_pdu_timezone_units.py --ips .\pdus.txt --dry-run -v
+
+If that looks good, run live:
+
+    python .\bootstrap_pdu_timezone_units.py --ips .\pdus.txt --log-file .\pdu-timezone-units.log
+
+After that works on one PDU, add the remaining PDUs to pdus.txt.

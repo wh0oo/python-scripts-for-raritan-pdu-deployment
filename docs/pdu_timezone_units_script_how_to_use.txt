@@ -1,0 +1,621 @@
+How To Use bootstrap_pdu_timezone_units.py on Windows
+====================================================
+
+This guide explains how to install Python on Windows and run the Raritan PDU
+timezone and display-units script.
+
+The script file is called:
+
+    bootstrap_pdu_timezone_units.py
+
+The default IP list file is called:
+
+    pdus.txt
+
+The script reads pdus.txt, connects to each PDU, and configures the timezone
+and display units.
+
+This guide is written for Windows PowerShell.
+
+Before you start
+----------------
+
+You need:
+
+    A Windows computer
+    Network access to the PDU management IPs
+    HTTPS access to the PDUs, usually TCP port 443
+    The script file: bootstrap_pdu_timezone_units.py
+    The PDU admin username and password
+    A text file named pdus.txt with one PDU IP address per line
+    Python 3 installed
+    The Python package named raritan installed
+
+Default settings applied
+------------------------
+
+By default, the script applies these settings:
+
+    Timezone:    America/Chicago
+    Temperature: Fahrenheit
+    Length:      feet
+    Pressure:    PSI
+
+It also applies the display-unit preferences to every existing local user by
+default.
+
+Recommended folder layout
+-------------------------
+
+Create one working folder and keep everything there.
+
+Example:
+
+    C:\pdu-automation
+
+Inside that folder, you should have:
+
+    C:\pdu-automation\bootstrap_pdu_timezone_units.py
+    C:\pdu-automation\pdus.txt
+
+Step 1 - Install Python on Windows
+----------------------------------
+
+Use the official Python installer or Python install manager.
+
+Recommended simple method:
+
+1. Open this page in a browser:
+
+       https://www.python.org/downloads/
+
+2. Download Python for Windows.
+
+3. Run the installer.
+
+4. If the installer shows an option like this, enable it:
+
+       Add python.exe to PATH
+
+5. Finish the install.
+
+Another supported method is the Python install manager from the Microsoft Store.
+Python's Windows documentation says the Python install manager can be installed
+from the Microsoft Store app or downloaded from python.org/downloads.
+
+Python.org also documents a WinGet install command for the Python install
+manager:
+
+    winget install 9NQ7512CXL7T
+
+Either method is fine as long as the python or py command works afterward.
+
+Step 2 - Open PowerShell
+------------------------
+
+Open PowerShell.
+
+A normal user PowerShell window is usually fine.
+
+You do not usually need Administrator PowerShell unless your local computer has
+restricted software install policies.
+
+Step 3 - Check that Python works
+--------------------------------
+
+Run:
+
+    py --version
+
+If that works, you should see a Python version.
+
+Example:
+
+    Python 3.14.6
+
+If py does not work, try:
+
+    python --version
+
+At least one of those should work.
+
+If neither command works, Python is not installed correctly or is not on PATH.
+
+Step 4 - Create the working folder
+----------------------------------
+
+Run:
+
+    mkdir C:\pdu-automation
+    cd C:\pdu-automation
+
+Copy this script into that folder:
+
+    bootstrap_pdu_timezone_units.py
+
+Step 5 - Create pdus.txt
+------------------------
+
+Yes, you need to create the list of IPs.
+
+The default filename is:
+
+    pdus.txt
+
+It must be in the same folder where you run the script, unless you pass a
+different path with --ips.
+
+Create the file:
+
+    notepad .\pdus.txt
+
+Put one PDU management IP address per line.
+
+Example:
+
+    10.10.5.10
+    10.10.5.11
+    10.10.5.12
+    10.10.5.13
+    10.10.5.14
+
+Save the file and close Notepad.
+
+Blank lines are OK.
+Lines beginning with # are OK.
+Inline comments after # are OK.
+Duplicate IPs are skipped.
+Invalid IPs stop the script with a line-numbered error.
+
+Example with comments:
+
+    # Example group of Raritan PDUs
+    10.10.5.10
+    10.10.5.11  # left-side PDU
+    10.10.5.12
+
+    # Spare PDU
+    10.10.5.13
+
+Step 6 - Create a Python virtual environment
+--------------------------------------------
+
+This keeps the Raritan package installed only for this project folder.
+
+Run:
+
+    py -m venv .venv
+
+Then activate it:
+
+    .\.venv\Scripts\Activate.ps1
+
+If PowerShell blocks activation, you may see an execution policy error.
+
+If that happens, run:
+
+    Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+
+Then try again:
+
+    .\.venv\Scripts\Activate.ps1
+
+When the virtual environment is active, your prompt usually starts with:
+
+    (.venv)
+
+Step 7 - Install the Raritan Python package
+-------------------------------------------
+
+With the virtual environment active, run:
+
+    python -m pip install --upgrade pip
+    python -m pip install raritan
+
+Then test the import:
+
+    python -c "import raritan.rpc; print('raritan import OK')"
+
+If you see this, the package import worked:
+
+    raritan import OK
+
+The raritan package is the Xerus JSON-RPC Python binding for Raritan and Server
+Technology devices.
+
+Step 8 - Optional: list supported timezones
+-------------------------------------------
+
+If you want to see the timezone names supported by the first PDU in pdus.txt,
+run:
+
+    python .\bootstrap_pdu_timezone_units.py --ips .\pdus.txt --list-timezones
+
+The script will ask for the PDU admin password.
+
+The password will not show on screen while you type.
+
+This command prints supported Olson/IANA time zones and supported display time
+zones from the first PDU in the list. It does not make changes.
+
+Normally, you do not need this step because the default timezone is:
+
+    America/Chicago
+
+Step 9 - First dry run
+----------------------
+
+Do a dry run before changing anything.
+
+Run:
+
+    python .\bootstrap_pdu_timezone_units.py --ips .\pdus.txt --dry-run -v
+
+The script will ask for the PDU admin password.
+
+The password will not show on screen while you type.
+
+In dry-run mode, the script logs in and reads current settings, but it does not
+write any changes.
+
+Good dry-run output includes a timestamp, the log level, the PDU IP address,
+and one or more result lines for timezone, default preferences, and user
+preferences.
+
+If pdus.txt has one PDU, good dry-run output may look like this:
+
+    2026-07-07 16:40:41 INFO Processing 1 PDU(s) [DRY RUN, timezone=America/Chicago, units=Fahrenheit/feet/PSI, apply_users=True, concurrency=1, verify_cert=False]...
+    2026-07-07 16:40:42 INFO 10.10.5.10: TIMEZONE - would_set; current=(id=17, name=(UTC-05:00) Eastern Time (US & Canada), autoDST=True); desired=(id=18, name=(UTC-06:00) Central Time (US & Canada), hasDSTInfo=True, autoDST=True)
+    2026-07-07 16:40:42 INFO 10.10.5.10: DEFAULT PREFS - would_set; current=(temp=DEG_C, length=METER, pressure=PASCAL); desired=(temp=DEG_F, length=FEET, pressure=PSI)
+    2026-07-07 16:40:42 INFO 10.10.5.10: USER admin PREFS - would_set; current=(temp=DEG_C, length=METER, pressure=PASCAL); desired=(temp=DEG_F, length=FEET, pressure=PSI)
+    2026-07-07 16:40:42 INFO Done. OK=1 Failed=0
+
+The exact date, time, current timezone label, current unit names, and user list
+will be different on your computer and your PDUs.
+
+The important parts are:
+
+    TIMEZONE - would_set
+    DEFAULT PREFS - would_set
+    USER <username> PREFS - would_set
+    Done. OK=1 Failed=0
+
+If a setting is already correct, you may see:
+
+    already_configured
+
+That is also a good result.
+
+Step 10 - Live run
+------------------
+
+After dry-run succeeds, run the live change:
+
+    python .\bootstrap_pdu_timezone_units.py --ips .\pdus.txt --log-file .\pdu-timezone-units.log
+
+The script will ask for the PDU admin password.
+
+The password will not show on screen while you type.
+
+Good live output includes a timestamp, the log level, the PDU IP address, and
+verified result lines.
+
+If pdus.txt has one PDU, good live output may look like this:
+
+    2026-07-07 16:45:12 INFO Processing 1 PDU(s) [LIVE, timezone=America/Chicago, units=Fahrenheit/feet/PSI, apply_users=True, concurrency=1, verify_cert=False]...
+    2026-07-07 16:45:13 INFO 10.10.5.10: TIMEZONE - set; current=(id=17, name=(UTC-05:00) Eastern Time (US & Canada), autoDST=True); desired=(id=18, name=(UTC-06:00) Central Time (US & Canada), hasDSTInfo=True, autoDST=True)
+    2026-07-07 16:45:13 INFO 10.10.5.10: DEFAULT PREFS - set; current=(temp=DEG_C, length=METER, pressure=PASCAL); desired=(temp=DEG_F, length=FEET, pressure=PSI)
+    2026-07-07 16:45:14 INFO 10.10.5.10: USER admin PREFS - set; current=(temp=DEG_C, length=METER, pressure=PASCAL); desired=(temp=DEG_F, length=FEET, pressure=PSI)
+    2026-07-07 16:45:14 INFO Done. OK=1 Failed=0
+
+The exact date and time will be different.
+
+The important part is:
+
+    Done. OK=1 Failed=0
+
+Step 11 - Rerun if needed
+-------------------------
+
+The script is designed to be rerunnable.
+
+If a PDU already has the correct timezone and unit settings, it should report
+lines like this:
+
+    TIMEZONE - already_configured
+    DEFAULT PREFS - already_configured
+    USER admin PREFS - already_configured
+
+That is not a problem.
+
+It means the script checked the settings and did not need to change them again.
+
+Common commands
+---------------
+
+Dry-run with the default pdus.txt:
+
+    python .\bootstrap_pdu_timezone_units.py --dry-run -v
+
+Live run with the default pdus.txt:
+
+    python .\bootstrap_pdu_timezone_units.py --log-file .\pdu-timezone-units.log
+
+Use a different IP list file:
+
+    python .\bootstrap_pdu_timezone_units.py --ips .\my-pdus.txt --dry-run
+
+Use a longer timeout:
+
+    python .\bootstrap_pdu_timezone_units.py --ips .\pdus.txt --timeout 30 --dry-run
+
+Process four PDUs in parallel:
+
+    python .\bootstrap_pdu_timezone_units.py --ips .\pdus.txt --concurrency 4 --dry-run
+
+For first use, keep concurrency at 1.
+
+Set only the default preferences and skip existing users:
+
+    python .\bootstrap_pdu_timezone_units.py --ips .\pdus.txt --no-apply-users --dry-run -v
+
+Use a different timezone:
+
+    python .\bootstrap_pdu_timezone_units.py --ips .\pdus.txt --timezone US/Central --dry-run -v
+
+Avoid automatic DST:
+
+    python .\bootstrap_pdu_timezone_units.py --ips .\pdus.txt --no-auto-dst --dry-run -v
+
+Use an environment variable for the admin password
+--------------------------------------------------
+
+This avoids typing the admin password every run.
+
+In PowerShell:
+
+    $env:PDU_ADMIN_PASSWORD = "your-password-here"
+
+Then run:
+
+    python .\bootstrap_pdu_timezone_units.py --ips .\pdus.txt --dry-run
+
+This environment variable only applies to the current PowerShell session.
+
+Close PowerShell when you are done.
+
+Avoid this when screen sharing or recording.
+
+Command-line options
+--------------------
+
+--ips PATH
+
+    IP list file.
+    Default: pdus.txt
+
+--username USERNAME
+
+    PDU login username.
+    Default: admin
+
+--password PASSWORD
+
+    PDU admin password.
+    Supported, but not recommended because it can appear in shell history.
+
+--timezone TIMEZONE
+
+    Timezone to apply.
+    Default: America/Chicago
+
+    Aliases such as CST, CDT, Central, Central Time, and US/Central resolve
+    toward America/Chicago.
+
+--no-auto-dst
+
+    Do not enable automatic DST adjustment even if the selected timezone
+    supports it.
+
+--apply-users
+
+    Apply Fahrenheit, feet, and PSI to every existing local user.
+    This is the default behavior.
+
+--no-apply-users
+
+    Only set default Fahrenheit, feet, and PSI preferences.
+    Do not update existing local users.
+
+--list-timezones
+
+    List supported timezones from the first PDU in --ips and exit without
+    making changes.
+
+--timeout SECONDS
+
+    Connection timeout per PDU.
+    Default: 10
+
+--concurrency NUMBER
+
+    Number of PDUs to process in parallel.
+    Default: 1
+
+--dry-run
+
+    Show what would change without writing settings.
+
+-v or --verbose
+
+    Show debug logging.
+
+--log-file PATH
+
+    Write a log file.
+
+--no-insecure
+
+    Require valid trusted HTTPS certificates.
+
+--insecure
+
+    Disable HTTPS certificate verification.
+    This is already the default because many PDUs use self-signed certificates.
+
+What to do if something fails
+-----------------------------
+
+Problem:
+
+    No IPs found in pdus.txt
+
+Fix:
+
+    Make sure pdus.txt exists in the folder where you are running the script.
+    Make sure it has one IP address per line.
+
+Problem:
+
+    invalid IP address
+
+Fix:
+
+    Check the line number shown in the error.
+    Remove hostnames or extra text from pdus.txt.
+    The file should contain one IP address per line, with optional comments
+    after #.
+
+Problem:
+
+    python is not recognized
+    py is not recognized
+
+Fix:
+
+    Python is not installed correctly, or it is not on PATH.
+    Reinstall Python and enable the PATH option if offered.
+
+Problem:
+
+    No module named raritan
+
+Fix:
+
+    The Raritan Python package is not installed in the Python environment you
+    are using. Activate the virtual environment and run:
+
+        python -m pip install raritan
+
+Problem:
+
+    HTTP Error 401 or HTTP Error 403
+
+Fix:
+
+    The admin password is probably wrong for that PDU, or the account does not
+    have permission to use the API.
+
+Problem:
+
+    Connection timed out
+    Connection refused
+    No route to host
+
+Fix:
+
+    Check the IP address.
+    Check that the PDU is powered and online.
+    Check that your computer can reach the PDU management network.
+    Check firewall rules for HTTPS/TCP 443.
+
+Problem:
+
+    timezone not found on this PDU
+
+Fix:
+
+    Run:
+
+        python .\bootstrap_pdu_timezone_units.py --ips .\pdus.txt --list-timezones
+
+    Review the timezone names supported by the PDU and rerun with --timezone.
+
+Problem:
+
+    server1AuthKeyId
+
+Fix:
+
+    Make sure you are using the current version of this script.
+    The current version uses raw JSON-RPC for /datetime getCfg and setCfg to
+    avoid the typed DateTime/NTP decode issue.
+
+Problem:
+
+    Some PDUs changed and others failed
+
+Fix:
+
+    Review the failed IPs shown at the end.
+    Fix the issue.
+    Rerun the script.
+
+    PDUs that already changed should report already_configured.
+
+Recommended first production process
+------------------------------------
+
+1. Put one test PDU in pdus.txt.
+
+2. Run dry-run:
+
+       python .\bootstrap_pdu_timezone_units.py --ips .\pdus.txt --dry-run -v
+
+3. If dry-run works, run live:
+
+       python .\bootstrap_pdu_timezone_units.py --ips .\pdus.txt --log-file .\pdu-timezone-units.log
+
+4. Confirm the timezone and units in the PDU web interface.
+
+5. Add the remaining PDU IPs to pdus.txt.
+
+6. Run dry-run again.
+
+7. Run live again.
+
+8. Save the log file for your records.
+
+Security reminders
+------------------
+
+Do not paste real passwords into tickets, chat, email, or screenshots.
+
+Do not use --password unless you have a specific reason.
+
+Prefer the interactive password prompt.
+
+Close PowerShell after using $env:PDU_ADMIN_PASSWORD.
+
+Keep pdus.txt limited to the intended PDUs.
+
+Review the log file before attaching or sharing it.
+
+Source references
+-----------------
+
+Python for Windows documentation:
+
+    https://docs.python.org/3/using/windows.html
+
+Python downloads:
+
+    https://www.python.org/downloads/
+
+Python install manager release page:
+
+    https://www.python.org/downloads/release/pymanager-262/
+
+Raritan Python package:
+
+    https://pypi.org/project/raritan/
