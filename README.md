@@ -12,6 +12,7 @@ These scripts are designed for bootstrapping and maintaining groups of PDUs from
 | [`bootstrap_pdu_names_from_dns.py`](./bootstrap_pdu_names_from_dns.py) | Sets each PDU's user-defined name from reverse DNS. | [README](./docs/bootstrap_pdu_names_from_dns.md) / [What it does](./docs/pdu_names_from_dns_script_explanation.txt) / [How to use](./docs/pdu_names_from_dns_script_how_to_use.txt) |
 | [`bootstrap_pdu_firmware.py`](./bootstrap_pdu_firmware.py) | Checks installed firmware versions or uploads and installs a firmware image across a list of devices. | [README](./docs/bootstrap_pdu_firmware.md) / [What it does](./docs/pdu_firmware_script_explanation.txt) / [How to use](./docs/pdu_firmware_script_how_to_use.txt) |
 | [`bootstrap_pdu_radius.py`](./bootstrap_pdu_radius.py) | Stages RADIUS server entries and supporting local user accounts across a list of devices. | [README](./docs/bootstrap_pdu_radius.md) / [What it does](./docs/pdu_radius_script_explanation.txt) / [How to use](./docs/pdu_radius_script_how_to_use.txt) |
+| [`bootstrap_pdu_timezone_units.py`](./bootstrap_pdu_timezone_units.py) | Sets timezone and display units, including Fahrenheit, feet, and PSI, across a list of devices. | [README](./docs/bootstrap_pdu_timezone_units.md) / [What it does](./docs/pdu_timezone_units_script_explanation.txt) / [How to use](./docs/pdu_timezone_units_script_how_to_use.txt) |
 
 ## Requirements
 
@@ -90,6 +91,12 @@ Preview RADIUS server and local user staging:
 python bootstrap_pdu_radius.py --ips pdus.txt --config radius_config.json --dry-run -v
 ```
 
+Preview timezone and display-unit settings:
+
+```bash
+python bootstrap_pdu_timezone_units.py --ips pdus.txt --dry-run -v
+```
+
 ## Script notes
 
 ### `bootstrap_pdu_passwords.py`
@@ -144,6 +151,21 @@ RADIUS staging is intentionally conservative:
 - The RADIUS shared secret cannot be verified by reading it back from the API, so live mode reapplies RADIUS server settings whenever RADIUS servers are enabled.
 - Existing local users are reported as `already_exists` and are not modified.
 - New local users are verified after creation by reading the account list again.
+
+### `bootstrap_pdu_timezone_units.py`
+
+Sets the PDU timezone and display-unit preferences.
+
+By default, it sets:
+
+- Timezone: `America/Chicago`
+- Temperature: Fahrenheit
+- Length/distance: feet
+- Pressure: PSI
+
+The script updates both the default display preferences and every existing local user's display preferences unless `--no-apply-users` is used.
+
+This script intentionally uses raw JSON-RPC for the `/datetime` get/set path instead of the typed `datetime.DateTime.getCfg()` / `setCfg()` wrapper. On tested hardware, the typed wrapper could fail while decoding optional NTP-related fields even though the script only needed timezone settings. The script changes only the timezone portion of the raw DateTime config and preserves the rest.
 
 ## Exit codes
 
