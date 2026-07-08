@@ -10,12 +10,12 @@ Default behavior:
     * Set every existing local user's display preferences to Fahrenheit, feet, and PSI.
 
 This script does not change power state, outlets, thresholds, network settings,
-RADIUS settings, or passwords.
+RADIUS settings, SNMP settings, or passwords.
 
 Common examples:
-    python .\bootstrap_pdu_timezone_units.py --ips .\pdus.txt --dry-run -v
-    python .\bootstrap_pdu_timezone_units.py --ips .\pdus.txt -v --log-file .\pdu-timezone-units.log
-    python .\bootstrap_pdu_timezone_units.py --ips .\pdus.txt --list-timezones
+    python .\\bootstrap_pdu_timezone_units.py --ips .\\pdus.txt --dry-run -v
+    python .\\bootstrap_pdu_timezone_units.py --ips .\\pdus.txt -v --log-file .\\pdu-timezone-units.log
+    python .\\bootstrap_pdu_timezone_units.py --ips .\\pdus.txt --list-timezones
 
 Use --dry-run first.
 """
